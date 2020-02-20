@@ -1,4 +1,5 @@
 import mqtt_can
+import mqtt_logamatic
 import logging
 from collections import namedtuple
 import queue
@@ -72,10 +73,16 @@ class MonBase:
                     self.values[k] = newval[nk]
                     self.value_timestamps[k] = now
                     self.update_event(k)
-    
-    def update_event(self, k):
-        publish_update(self, k)
+    def get_value(self, k):
+        fk = "/".join((self.prefix, k))
+        return self.values[fk]
 
+    def update_summary(self):
+        pass
+
+    def update_event(self, k):
+        publish_update(k, self.values[k])
+        self.update_summary()
 
 
 class MonHeizkreis(MonBase):
@@ -88,6 +95,14 @@ class MonHeizkreis(MonBase):
         self.datatypes[4] = DataTempRaum("T_Rs", "Raumsolltemperatur")
         self.datatypes[5] = DataTempRaum("T_Rm", "Raumisttemperatur")
 
+    def update_summary(self):
+        def vs(k):
+            try:
+                return self.get_value(k)
+            except:
+                return "--"
+        s = "V: {0}/{1}\nR: {2}/{3}".format(vs("T_Vs"), vs("T_Vm"), vs("T_Rs"), vs("T_Rm"))
+        publish_summary(self.name, s)
 
     
 class MonKessel(MonBase):
@@ -98,6 +113,15 @@ class MonKessel(MonBase):
         self.datatypes[7] = DataHex("Kesselstatus", "Kessel Betrieb Bits")
         self.datatypes[8] = DataSimple("Brenner_s", "Brenner Ansteuerung")
         self.datatypes[34] = DataHex("Brennerstatus", "Brenner Status Bits")
+        
+    def update_summary(self):
+        def vs(k):
+            try:
+                return self.get_value(k)
+            except:
+                return "--"
+        s = "V: {0}/{1}\nA: {2}".format(vs("T_s"), vs("T_m"), vs("Brenner_s"))
+        publish_summary(self.name, s)
 
 class MonGeneric(MonBase):
     def __init__(self, monid, name):
@@ -109,6 +133,15 @@ class MonSolar(MonBase):
         super().__init__(monid, name, 54)
         self.datatypes[10] = DataTempVorl("T_Bufm", "Temperatur Speichermitte")
         self.datatypes[11] = DataTempVorl("T_Rlm", "Anlagenrücklauftemperatur")
+
+    def update_summary(self):
+        def vs(k):
+            try:
+                return self.get_value(k)
+            except:
+                return "--"
+        s = "B: {0}\nR: {1}".format(vs("T_Bufm"), vs("T_Rlm"))
+        publish_summary(self.name, s)
 
 CompleteLogamaticType = namedtuple("LogamaticType", "name datalen dataclass shortname")
 LogamaticType = lambda name, datalen, dataclass=None, shortname="": CompleteLogamaticType(name, datalen, dataclass, shortname)
@@ -218,8 +251,12 @@ def recv_can_monitor(msg):
         mon_objects[oid].recv(msg.data[1:])
         log.debug("Update for oid 0x%x done", oid)
 
-def publish_update(monobj, k):
-    log.info("Update: %s = %s", str(k), str(monobj.values[k]))
+def publish_update(k, v):
+    log.info("Update: %s = %s", str(k), str(v))
+    mqtt_logamatic.publish_value(str(k), str(v))
+    update_value_dump()
+    
+def update_value_dump():
     global valuestr
     valuestr = ""
     for ok in sorted(mon_objects):
@@ -231,6 +268,12 @@ def publish_update(monobj, k):
         with open(valuefile, "w") as f:
             f.write(valuestr)
 
+def publish_summary(name, s):
+    mqtt_logamatic.publish_summary(name, s)
+
+def mqtt_command_callback(msg):
+    log.info("Receive MQTT command %s : %s", msg.topic, msg.payload)
+
 valuefile = None
 valuestr = ""
 if __name__ == "__main__":
@@ -238,9 +281,11 @@ if __name__ == "__main__":
         valuefile = sys.argv[1]
     except: pass
     mqtt_can.start(can_recv_callback)
+    mqtt_logamatic.start(mqtt_command_callback)
     try:
         while True:
             handle_recv()
     except KeyboardInterrupt:
         mqtt_can.stop()
+        mqtt_logamatic.stop()
         raise
