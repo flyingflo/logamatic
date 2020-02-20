@@ -3,6 +3,7 @@ import logging
 from collections import namedtuple
 import queue
 import time
+import sys
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -24,11 +25,16 @@ class DataTypeBase():
             dict of decoded values 
         """
 
-
-
-class DataTempVorl(DataTypeBase):
+class DataSimple(DataTypeBase):
     def decode(self, byte):
         return {self.name: int(byte)}
+
+class DataHex(DataTypeBase):
+    def decode(self, byte):
+        return {self.name: "0x{0:02X}".format(int(byte))}
+
+class DataTempVorl(DataSimple):
+    pass
 
 class DataTempRaum(DataTypeBase):
     def decode(self, byte):
@@ -46,13 +52,14 @@ class MonBase:
         self.value_timestamps = {}
         
     def recv(self, databytes):
+        blocklen = 6
         now = timestamp()
         i = databytes[0]
-        if i+5 > self.datalen:
+        if i+blocklen > self.datalen:
             raise ValueError("Monitor data out of bounds")
-        self.mem[i:i+5] = databytes[1:]
+        self.mem[i:i+blocklen] = databytes[1:]
         updated = []
-        for p in range(i, i+5):
+        for p in range(i, i+blocklen):
             if not self.datatypes[p]:
                 log.debug("Mon recv %d: no datatype", p)
                 continue
@@ -67,33 +74,41 @@ class MonBase:
                     self.update_event(k)
     
     def update_event(self, k):
-        log.info("Update: %s = %s", str(k), str(self.values[k]))
+        publish_update(self, k)
 
 
 
 class MonHeizkreis(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 18)
-        # self.datatypes[0] = DataFlagsHeizkBetr1("Status1", "Betriebswerte 1")
-        # self.datatypes[1] = DataFlagsHeizkBetr2("Status2", "Betriebswerte 2")
-        self.datatypes[2] = DataTempVorl("TVset", "Vorlaufsolltemperatur")
-        self.datatypes[3] = DataTempVorl("TVcur", "Vorlaufisttemperatur")
-        self.datatypes[4] = DataTempRaum("TRset", "Raumsolltemperatur")
-        self.datatypes[5] = DataTempRaum("TRcur", "Raumisttemperatur")
+        self.datatypes[0] = DataHex("Status1", "Betriebswerte 1")
+        self.datatypes[1] = DataHex("Status2", "Betriebswerte 2")
+        self.datatypes[2] = DataTempVorl("T_Vs", "Vorlaufsolltemperatur")
+        self.datatypes[3] = DataTempVorl("T_Vm", "Vorlaufisttemperatur")
+        self.datatypes[4] = DataTempRaum("T_Rs", "Raumsolltemperatur")
+        self.datatypes[5] = DataTempRaum("T_Rm", "Raumisttemperatur")
 
 
     
 class MonKessel(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 42)
+        self.datatypes[0] = DataTempVorl("T_s", "Kesselvorlauf-Solltemperatur")
+        self.datatypes[1] = DataTempVorl("T_m", "Kesselvorlauf-Isttemperatur")
+        self.datatypes[7] = DataHex("Kesselstatus", "Kessel Betrieb Bits")
+        self.datatypes[8] = DataSimple("Brenner_s", "Brenner Ansteuerung")
+        self.datatypes[34] = DataHex("Brennerstatus", "Brenner Status Bits")
 
 class MonGeneric(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 24)
+        self.datatypes[0] = DataTempVorl("T_Aus", "Außentemperatur")
 
 class MonSolar(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 54)
+        self.datatypes[10] = DataTempVorl("T_Bufm", "Temperatur Speichermitte")
+        self.datatypes[11] = DataTempVorl("T_Rlm", "Anlagenrücklauftemperatur")
 
 CompleteLogamaticType = namedtuple("LogamaticType", "name datalen dataclass shortname")
 LogamaticType = lambda name, datalen, dataclass=None, shortname="": CompleteLogamaticType(name, datalen, dataclass, shortname)
@@ -107,7 +122,7 @@ monitor_types = {
     0x84 : LogamaticType("Warmwasser", 12),
     0x85 : LogamaticType("Strategie wandhängend", 12),
     0x87 : LogamaticType("Fehlerprotokoll", 42),
-    0x88 : LogamaticType("Kessel bodenstehend", 42, MonKessel),
+    0x88 : LogamaticType("Kessel bodenstehend", 42, MonKessel, "Kessel"),
     0x89 : LogamaticType("Konfiguration", 24, MonGeneric),
     0x8A : LogamaticType("Heizkreis 5", 18, MonHeizkreis),
     0x8B : LogamaticType("Heizkreis 6", 18, MonHeizkreis),
@@ -128,7 +143,7 @@ monitor_types = {
     0x9B : LogamaticType("Wärmemenge", 36),
     0x9C : LogamaticType("Störmeldemodul", 6),
     0x9D : LogamaticType("Unterstation", 6),
-    0x9E : LogamaticType("Solarfunktion", 54, MonSolar),
+    0x9E : LogamaticType("Solarfunktion", 54, MonSolar, "Speicher"),
     0x9F : LogamaticType("alternativer Wärmeerzeuger", 42),
 }
 setting_types = {
@@ -191,8 +206,8 @@ def recv_can_monitor(msg):
     if not oid in mon_objects:
         if oid in monitor_types:
             if monitor_types[oid].dataclass:
-                monitor_types[oid].name
-                mon_objects[oid] = monitor_types[oid].dataclass(oid, monitor_types[oid].name)
+                name = monitor_types[oid].shortname if monitor_types[oid].shortname else monitor_types[oid].name
+                mon_objects[oid] = monitor_types[oid].dataclass(oid,name)
                 log.info("New can monitor object 0x%x", oid)
             else:
                 log.debug("No dataclass implemented for oid 0x%x", oid)
@@ -203,7 +218,25 @@ def recv_can_monitor(msg):
         mon_objects[oid].recv(msg.data[1:])
         log.debug("Update for oid 0x%x done", oid)
 
+def publish_update(monobj, k):
+    log.info("Update: %s = %s", str(k), str(monobj.values[k]))
+    global valuestr
+    valuestr = ""
+    for ok in sorted(mon_objects):
+        o = mon_objects[ok]
+        for vk in sorted(o.values):
+            valuestr += vk.ljust(30) + "=" + str(o.values[vk]) + "\n"
+    log.info("All current values:\n" + valuestr)
+    if valuefile:
+        with open(valuefile, "w") as f:
+            f.write(valuestr)
+
+valuefile = None
+valuestr = ""
 if __name__ == "__main__":
+    try:
+        valuefile = sys.argv[1]
+    except: pass
     mqtt_can.start(can_recv_callback)
     try:
         while True:
