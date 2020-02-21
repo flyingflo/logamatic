@@ -4,7 +4,6 @@ import logging
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
-logging.basicConfig()
 
 topic_prefix = "/heizung/logamatic/"
 def on_connect(client, userdata, flags, rc, properties=None):
@@ -48,5 +47,6 @@ def test_callback(msg):
     log.info("id %d data %s", msg.pkid, msg.data.hex())
 
 if __name__ == "__main__":
+    logging.basicConfig()
     start(test_callback)
     

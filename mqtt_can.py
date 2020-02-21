@@ -6,7 +6,6 @@ import logging
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
-logging.basicConfig()
 
 class CanMsg:
     def __init__(self, pkid, data, rtr=0):
@@ -52,5 +51,6 @@ def test_callback(msg):
     log.info("id %d data %s", msg.pkid, msg.data.hex())
 
 if __name__ == "__main__":
+    logging.basicConfig()
     start(test_callback)
     

@@ -8,7 +8,6 @@ import sys
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
-logging.basicConfig()
 
 timestamp = time.time
 
@@ -301,6 +300,7 @@ def mqtt_command_callback(msg):
 valuefile = None
 valuestr = ""
 if __name__ == "__main__":
+    logging.basicConfig()
     try:
         valuefile = sys.argv[1]
     except: pass
