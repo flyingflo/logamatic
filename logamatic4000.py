@@ -41,6 +41,30 @@ class DataTempRaum(DataTypeBase):
     def decode(self, byte):
         return {self.name: int(byte)/2}
 
+class DataHKStat1(DataTypeBase):
+    def decode(self, byte):
+        if byte == 0x04:
+            v = "AUT"
+        elif byte == 0:
+            v = "MAN0"
+        elif byte == 0x80:
+            v = "MAN8"
+        else:
+            v = "0x{0:02X}".format(int(byte))
+        return {self.name: v}
+
+class DataHKStat2(DataTypeBase):
+    def decode(self, byte):
+        if byte == 1:
+            v = "Sommer"
+        elif byte == 2:
+            v = "Tag"
+        elif byte == 0:
+            v = "Nacht"
+        else:
+            v = "0x{0:02X}".format(int(byte))
+        return {self.name: v}
+
 class MonBase:
     def __init__(self, monid, name, datalen):
         self.monid = monid
@@ -88,8 +112,8 @@ class MonBase:
 class MonHeizkreis(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 18)
-        self.datatypes[0] = DataHex("Status1", "Betriebswerte 1")
-        self.datatypes[1] = DataHex("Status2", "Betriebswerte 2")
+        self.datatypes[0] = DataHKStat1("Status1", "Betriebswerte 1")
+        self.datatypes[1] = DataHKStat2("Status2", "Betriebswerte 2")
         self.datatypes[2] = DataTempVorl("T_Vs", "Vorlaufsolltemperatur")
         self.datatypes[3] = DataTempVorl("T_Vm", "Vorlaufisttemperatur")
         self.datatypes[4] = DataTempRaum("T_Rs", "Raumsolltemperatur")
@@ -101,7 +125,7 @@ class MonHeizkreis(MonBase):
                 return self.get_value(k)
             except:
                 return "--"
-        s = "V: {0}/{1}\nR: {2}/{3}".format(vs("T_Vs"), vs("T_Vm"), vs("T_Rs"), vs("T_Rm"))
+        s = "V: {0}/{1}\nR: {2}/{3}\n{4} {5}".format(vs("T_Vs"), vs("T_Vm"), vs("T_Rs"), vs("T_Rm"), vs("Status1"), vs("Status2"))
         publish_summary(self.name, s)
 
     
