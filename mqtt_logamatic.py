@@ -26,7 +26,7 @@ def publish_summary(name, s):
 
 callback = None
 
-client = paho.mqtt.client.Client()
+client = paho.mqtt.client.Client(client_id="logamatic_mqtt_monitor_and_control")
 client.on_connect = on_connect
 client.on_message = on_message
 client.on_disconnect = on_disconnect

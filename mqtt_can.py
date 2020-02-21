@@ -30,7 +30,7 @@ def on_disconnect(client, userdata, rc):
 
 callback = None
 
-client = paho.mqtt.client.Client()
+client = paho.mqtt.client.Client(client_id="logamatic_mqtt_can_interface")
 client.on_connect = on_connect
 client.on_message = on_message
 client.on_disconnect = on_disconnect
