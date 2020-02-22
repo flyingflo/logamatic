@@ -18,10 +18,14 @@ def on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe("/heizung/burner/can/raw/recv/")
 
 def on_message(client, userdata, msg):
-    log.debug("on_message %s", msg.topic)
-    m = msg.payload.decode().split(";")
-    canmsg = CanMsg(int(m[1], base=16), bytes.fromhex(m[2]), int(m[0]))
-    callback(canmsg)
+    try:
+        m = msg.payload.decode().split(";")
+        log.debug("on_message %s : %s", msg.topic, str(m))
+        canmsg = CanMsg(int(m[1], base=16), bytes.fromhex(m[2].strip("\x00")), int(m[0]))
+        callback(canmsg)
+    except Exception as E:
+        log.error("Exception on_message %s : %s", msg.topic, msg.payload)
+        log.error(str(E))
 
 def on_disconnect(client, userdata, rc):
     log.info("on_disconnect rc %d", rc);

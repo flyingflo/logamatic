@@ -11,8 +11,12 @@ def on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe(topic_prefix + "cmd/#")
 
 def on_message(client, userdata, msg):
-    log.debug("on_message %s", msg.topic)
-    callback(msg)
+    try:
+        log.debug("on_message %s", msg.topic)
+        callback(msg)
+    except Exception as E:
+        log.error("Exception on_message %s : %s", msg.topic, msg.payload)
+        log.error(str(E))
 
 def on_disconnect(client, userdata, rc):
     log.info("on_disconnect rc %d", rc);
