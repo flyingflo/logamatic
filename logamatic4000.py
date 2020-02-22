@@ -312,4 +312,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         mqtt_can.stop()
         mqtt_logamatic.stop()
-        raise
+        log.info("Exit")
+        sys.exit(0)
