@@ -236,7 +236,7 @@ can_recv_queue = queue.Queue()
 
 def can_recv_callback(msg):
     can_recv_queue.put(msg)
-    log.debug("Incoming CAN id %d data %s", msg.pkid, msg.data.hex())
+    log.debug("Incoming CAN id %d data %s", msg.pkid, str(msg.data))
 
 def handle_recv():
     msg = can_recv_queue.get()
