@@ -239,7 +239,7 @@ def can_recv_callback(msg):
     log.debug("Incoming CAN id %d data %s", msg.pkid, str(msg.data))
 
 def handle_recv():
-    msg = can_recv_queue.get()
+    msg = can_recv_queue.get(timeout=100)
     try:
         if msg.pkid & 0x400:
             recv_can_monitor(msg)
@@ -277,9 +277,9 @@ def recv_can_monitor(msg):
 def publish_update(k, v):
     log.info("Update: %s = %s", str(k), str(v))
     mqtt_logamatic.publish_value(str(k), str(v))
-    update_value_dump()
+    update_value_cache()
     
-def update_value_dump():
+def update_value_cache():
     global valuestr
     valuestr = ""
     for ok in sorted(mon_objects):
@@ -290,6 +290,20 @@ def update_value_dump():
     if valuefile:
         with open(valuefile, "w") as f:
             f.write(valuestr)
+
+last_all_publish = 0
+def publish_all_values():
+    global last_all_publish
+    now = time.time()
+    if now - last_all_publish < 1000:
+        return False
+    log.info("Publishing all values regularly")
+    for ok in sorted(mon_objects):
+        o = mon_objects[ok]
+        for vk in sorted(o.values):
+            mqtt_logamatic.publish_value(str(vk), str(o.values[vk]))
+    last_all_publish = now
+    return True
 
 def publish_summary(name, s):
     mqtt_logamatic.publish_summary(name, s)
@@ -309,6 +323,7 @@ if __name__ == "__main__":
     try:
         while True:
             handle_recv()
+            publish_all_values()
     except KeyboardInterrupt:
         mqtt_can.stop()
         mqtt_logamatic.stop()
