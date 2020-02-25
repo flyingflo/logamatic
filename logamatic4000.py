@@ -40,6 +40,10 @@ class DataTempRaum(DataTypeBase):
     def decode(self, byte):
         return {self.name: int(byte)/2}
 
+class DataTempAussen(DataTypeBase):
+    def decode(self, byte):
+        return {self.name: int.from_bytes(bytes((byte, )), 'little', signed=True)}
+
 class DataHKStat1(DataTypeBase):
     def decode(self, byte):
         if byte == 0x04:
@@ -149,7 +153,7 @@ class MonKessel(MonBase):
 class MonGeneric(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 24)
-        self.datatypes[0] = DataTempVorl("T_Aus", "Außentemperatur")
+        self.datatypes[0] = DataTempAussen("T_Aus", "Außentemperatur")
 
 class MonSolar(MonBase):
     def __init__(self, monid, name):
