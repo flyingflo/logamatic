@@ -25,15 +25,15 @@ class DataTypeBase():
             dict of decoded values 
         """
 
-class DataSimple(DataTypeBase):
+class DataUInt8(DataTypeBase):
     def decode(self, byte):
         return {self.name: int(byte)}
 
-class DataHex(DataTypeBase):
+class DataUint8Hex(DataTypeBase):
     def decode(self, byte):
         return {self.name: "0x{0:02X}".format(int(byte))}
 
-class DataTempVorl(DataSimple):
+class DataTempVorl(DataUInt8):
     pass
 
 class DataTempRaum(DataTypeBase):
@@ -43,6 +43,34 @@ class DataTempRaum(DataTypeBase):
 class DataTempAussen(DataTypeBase):
     def decode(self, byte):
         return {self.name: int.from_bytes(bytes((byte, )), 'little', signed=True)}
+
+class DataUIntMultiByte(DataTypeBase):
+    class ByteHook(DataTypeBase):
+        def __init__(self, parent, byteindex):
+            self.parent = parent 
+            self.byteindex = byteindex
+
+        @property
+        def name(self):
+            return self.parent.name + "byte " + str(self.byteindex)
+            
+        def decode(self, byte):
+            self.parent.bytesvalues[self.byteindex] = byte
+            # Update the complete value after all bytes have been received.
+            # They use big endian but number them like little, so byte zero will come last.
+            if self.byteindex == 0:
+                v = int.from_bytes(self.parent.bytesvalues, byteorder='little', signed=False)
+                return {self.parent.name: v}
+            else:
+                return {}
+
+    def __init__(self, bytecount, name, fullname=''):
+        super().__init__(name, fullname=fullname)
+        self.bytesvalues = [0] * bytecount
+        self.bytehooks = [self.ByteHook(self, i) for i in range(bytecount)]
+
+    def byte(self, i):
+        return self.bytehooks[i]
 
 class DataHKStat1(DataTypeBase):
     def decode(self, byte):
@@ -137,9 +165,9 @@ class MonKessel(MonBase):
         super().__init__(monid, name, 42)
         self.datatypes[0] = DataTempVorl("T_s", "Kesselvorlauf-Solltemperatur")
         self.datatypes[1] = DataTempVorl("T_m", "Kesselvorlauf-Isttemperatur")
-        self.datatypes[7] = DataHex("Kesselstatus", "Kessel Betrieb Bits")
-        self.datatypes[8] = DataSimple("Brenner_s", "Brenner Ansteuerung")
-        self.datatypes[34] = DataHex("Brennerstatus", "Brenner Status Bits")
+        self.datatypes[7] = DataUint8Hex("Kesselstatus", "Kessel Betrieb Bits")
+        self.datatypes[8] = DataUInt8("Brenner_s", "Brenner Ansteuerung")
+        self.datatypes[34] = DataUint8Hex("Brennerstatus", "Brenner Status Bits")
         
     def update_summary(self):
         def vs(k):
@@ -169,6 +197,24 @@ class MonSolar(MonBase):
                 return "--"
         s = "B: {0}\nR: {1}".format(vs("T_Bufm"), vs("T_Rlm"))
         publish_summary(self.name, s)
+
+class MonWaermemenge(MonBase):
+    def __init__(self, monid, name):
+        super().__init__(monid, name, 36)
+
+        overall = DataUIntMultiByte(4, "W_overall", 'Wärmemenge gesamt')
+        self.datatypes[30] = overall.byte(3)
+        self.datatypes[31] = overall.byte(2)
+        self.datatypes[32] = overall.byte(1)
+        self.datatypes[33] = overall.byte(0)
+
+        today = DataUIntMultiByte(2, "W_today", "Wärmemenge heute")
+        self.datatypes[6] = today.byte(1)
+        self.datatypes[7] = today.byte(0)
+
+        yesterday = DataUIntMultiByte(2, "W_yesterday", "Wärmemenge Vortag")
+        self.datatypes[8] = yesterday.byte(1)
+        self.datatypes[9] = yesterday.byte(0)
 
 CompleteLogamaticType = namedtuple("LogamaticType", "name datalen dataclass shortname")
 LogamaticType = lambda name, datalen, dataclass=None, shortname="": CompleteLogamaticType(name, datalen, dataclass, shortname)
@@ -200,7 +246,7 @@ monitor_types = {
     0x98 : LogamaticType("Kessel 7 wandhängend", 60),
     0x99 : LogamaticType("Kessel 8 wandhängend", 60),
     0x9A : LogamaticType("KNX FM446",60),
-    0x9B : LogamaticType("Wärmemenge", 36),
+    0x9B : LogamaticType("Wärmemenge", 36, MonWaermemenge),
     0x9C : LogamaticType("Störmeldemodul", 6),
     0x9D : LogamaticType("Unterstation", 6),
     0x9E : LogamaticType("Solarfunktion", 54, MonSolar, "Speicher"),
