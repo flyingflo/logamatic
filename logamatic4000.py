@@ -112,7 +112,8 @@ class MonBase:
         now = timestamp()
         i = databytes[0]
         if i+blocklen > self.datalen:
-            raise ValueError("Monitor data out of bounds")
+            log.warning("Monitor data out of bounds %d, data %s", self.datalen, str(databytes))
+            return
         self.mem[i:i+blocklen] = databytes[1:]
         updated = []
         for p in range(i, i+blocklen):
