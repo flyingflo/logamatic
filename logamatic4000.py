@@ -291,7 +291,7 @@ def can_recv_callback(msg):
 def handle_recv():
     msg = can_recv_queue.get()
     try:
-        if msg.pkid & 0x400:
+        if msg.pkid & 0x421:
             recv_can_monitor(msg)
         if msg.pkid == 0:
             recv_can_setting(msg)
