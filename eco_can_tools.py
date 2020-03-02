@@ -1,3 +1,4 @@
+import paho.mqtt.client
 """
 Helpers for Buderus ECO CAN
 """
@@ -68,10 +69,8 @@ def stdio_can_dec(filt=None):
                 f = str(E)
             if f: sys.stdout.write(f + "\n")
 
-def mqtt_can_dec(filt=None):
-    import paho.mqtt.client
+def can_sniff(filt=None):
     client = paho.mqtt.client.Client()
-    
     def on_connect(client, userdata, flags, rc, properties=None):
         print("Connected ", rc)
         client.subscribe("/heizung/burner/can/raw/recv/")
@@ -84,10 +83,43 @@ def mqtt_can_dec(filt=None):
     client.on_message = on_message
     client.on_disconnect = lambda client, userdata, rc: print("Disconnected ", rc)
     rc = client.connect("pi3.lan")
-    client.loop_forever()
+    try:
+        client.loop_forever()
+    except KeyboardInterrupt as K:
+        client.disconnect()
+    except:
+        client.disconnect()
+        raise
 
 filt_no_mon = lambda rtr, mon, d, s, typ, offs, mem: mon == False
+filt_bcast = lambda rtr, mon, d, s, typ, offs, mem: d == 0
 
+def enc_can_msg(d, s, typ, offs, mem, mon=0, rtr=0):
+    i = enc_can_id(d, s, mon)
+    cand = [typ, offs, *mem]
+    dstr = " ".join(["{0:x}".format(d) for d in cand])
+    mqm = "{rtr:x};{i:x};{d:s}".format(rtr=rtr, i=i, d=dstr)
+    return mqm 
+
+def send_can_msg(d, s, typ, offs, mem, mon=0, rtr=0):
+    if len(mem) != 6:
+        ValueError("mem must be 6 long")
+    mqt = "/heizung/burner/can/raw/send"
+    mqm = enc_can_msg(d, s, typ, offs, mem, mon, rtr)
+    if not client.is_connected():
+        connect()
+
+    return client.publish(mqt, mqm).wait_for_publish()
+
+def connect():
+    rc = client.connect("pi3.lan")
+    client.loop_start() 
+def disconnect():
+    client.disconnect()
+    client.loop_stop()
+
+client = paho.mqtt.client.Client()
 if __name__ == "__main__":
-    mqtt_can_dec(filt_no_mon)
+    pass
+    # mqtt_can_dec(filt_no_mon)
     # stdio_can_dec()
