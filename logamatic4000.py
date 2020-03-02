@@ -306,7 +306,8 @@ def recv_can_setting(msg):
 
 def recv_can_monitor(msg):
     if len(msg.data) != 8:
-        raise ValueError("CAN monitor message with len != 8")
+        log.warning("CAN monitor message with len != 8")
+        return
     oid = msg.data[0]
     log.debug("Can monitor id=%d oid=0x%x", msg.pkid, oid)
 
