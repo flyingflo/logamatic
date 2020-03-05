@@ -292,7 +292,7 @@ def can_recv_callback(msg):
 def handle_recv():
     msg = can_recv_queue.get()
     try:
-        if msg.pkid & 0x421:
+        if msg.pkid == 0x421 or msg.pkid == 0x400:   # monitor data from address 1 or 0
             recv_can_monitor(msg)
         if msg.pkid == 0:
             recv_can_setting(msg)
@@ -348,6 +348,13 @@ def publish_summary(name, s):
 
 def mqtt_command_callback(msg):
     log.info("Receive MQTT command %s : %s", msg.topic, msg.payload)
+
+def enc_can_id(d, s, mon=0): 
+     m5 = 0b11111 
+     i = mon << 10 
+     i |= (d & m5) << 5 
+     i |= s & m5 
+     return i 
 
 valuefile = None
 valuestr = ""
