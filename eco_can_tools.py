@@ -1,4 +1,5 @@
 import paho.mqtt.client
+import traceback
 """
 Helpers for Buderus ECO CAN
 """
@@ -37,14 +38,14 @@ def str_msg(l, filt=None):
     typ = data[0]
     offs = data[1]
     mem = data[2:]
-    if filt and not filt(rtr, mon, d, s, typ, offs, mem):
+    if filt and not filt(rtr=rtr, mon=mon, d=d, s=s, typ=typ, offs=offs, mem=mem):
         return None
     else:
         return format_msg(rtr, mon, d, s, typ, offs, mem)
 
 def format_msg(rtr, mon, d, s, typ, offs, mem):
     longf = "rtr:{0:x} mon:{1:x} dst:{2:02x} src:{3:02x} typ:{4:02x} off:{5:02x} dat:{6:s}"
-    shortf = "r:{0:x} m:{1:x} d:{2:02x} s:{3:02x} t:{4:02x} o:{5:02x} d:{6:s}"
+    shortf = "r:{0:x} m:{1:x} r:{2:02x} s:{3:02x} t:{4:02x} o:{5:02x} d:{6:s}"
 
     return shortf.format(rtr, mon, d, s, typ, offs, " ".join(("{0:02x}".format(b) for b in mem))
     )
@@ -69,15 +70,18 @@ def stdio_can_dec(filt=None):
                 f = str(E)
             if f: sys.stdout.write(f + "\n")
 
-def can_sniff(filt=None):
+def sniff_can(filt=None):
     client = paho.mqtt.client.Client()
     def on_connect(client, userdata, flags, rc, properties=None):
         print("Connected ", rc)
         client.subscribe("/heizung/burner/can/raw/recv/")
     def on_message(client, userdata, msg): 
-        f = str_msg(msg.payload.decode(), filt)
-        if f:
-            print(f)
+        try:
+            f = str_msg(msg.payload.decode(), filt)
+            if f:
+                print(f)
+        except Exception as e:
+            traceback.print_exc()
 
     client.on_connect = on_connect
     client.on_message = on_message
@@ -91,8 +95,9 @@ def can_sniff(filt=None):
         client.disconnect()
         raise
 
-filt_no_mon = lambda rtr, mon, d, s, typ, offs, mem: mon == False
-filt_bcast = lambda rtr, mon, d, s, typ, offs, mem: d == 0
+filt_no_mon = lambda **kwargs: kwargs["mon"] == False
+filt_bcast = lambda **kwargs: kwargs["d"] == 0
+
 
 def enc_can_msg(d, s, typ, offs, mem, mon=0, rtr=0):
     i = enc_can_id(d, s, mon)
