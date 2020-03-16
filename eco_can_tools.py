@@ -28,7 +28,7 @@ def stridb(i):
     d, s, mon = dec_can_id(i)
     return "{0:03x} {1:b} {2:05b} {3:05b}".format(i, mon, d, s)
 
-def str_msg(l, filt=None):
+def dec_can_msg(l):
     m = l.replace("/heizung/burner/can/raw/recv/", "")
     ms = m.split(";")
     rtr = int(ms[0])
@@ -38,6 +38,10 @@ def str_msg(l, filt=None):
     typ = data[0]
     offs = data[1]
     mem = data[2:]
+    return rtr, mon, d, s, typ, offs, mem
+
+def str_msg(l, filt=None):
+    rtr, mon, d, s, typ, offs, mem = dec_can_msg(l)
     if filt and not filt(rtr=rtr, mon=mon, d=d, s=s, typ=typ, offs=offs, mem=mem):
         return None
     else:
@@ -98,6 +102,10 @@ def sniff_can(filt=None):
 filt_no_mon = lambda **kwargs: kwargs["mon"] == False
 filt_bcast = lambda **kwargs: kwargs["d"] == 0
 
+def filt_something_new(**k):
+    t = k["typ"]
+    return k["mon"] == False and t != 0 and t != 1 and t != 0xca and t != 0xcb and t != 0xc3 and t != 0xc0
+
 
 def enc_can_msg(d, s, typ, offs, mem, mon=0, rtr=0):
     i = enc_can_id(d, s, mon)
@@ -114,7 +122,12 @@ def send_can_msg(d, s, typ, offs, mem, mon=0, rtr=0):
     if not client.is_connected():
         connect()
 
-    return client.publish(mqt, mqm).wait_for_publish()
+    return client.publish(mqt, mqm, 2).wait_for_publish()
+
+def request_settings(r):
+    "This causes the *r*eiciver to dump its settings"
+    s = 17
+    send_can_msg(r, s, 0xfb, 1, [0]*6)
 
 def connect():
     rc = client.connect("pi3.lan")
