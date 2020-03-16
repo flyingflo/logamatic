@@ -36,6 +36,9 @@ class DataUint8Hex(DataTypeBase):
 class DataTempVorl(DataUInt8):
     pass
 
+class DataTempWW(DataUInt8):
+    pass
+
 class DataTempRaum(DataTypeBase):
     def decode(self, byte):
         return {self.name: int(byte)/2}
@@ -73,6 +76,17 @@ class DataUIntMultiByte(DataTypeBase):
         return self.bytehooks[i]
 
 class DataHKStat1(DataTypeBase):
+    """
+    Bits:
+    Ausschaltoptimierung
+    Einschaltoptimierung
+    Automatik
+    Warmwasservorrang
+    Estrichtrocknung
+    Ferien
+    Frostschutz
+    Manuell
+    """
     def decode(self, byte):
         if byte == 0x04:
             v = "AUT"
@@ -85,6 +99,16 @@ class DataHKStat1(DataTypeBase):
         return {self.name: v}
 
 class DataHKStat2(DataTypeBase):
+    """
+    1. Bit = Sommer
+    2. Bit = Tag
+    3. Bit = keine Kommunikation mit FB
+    4. Bit = FB fehlerhaft
+    5. Bit = Fehler Vorlauffühler
+    6. Bit = maximaler Vorlauf
+    7. Bit = externer Störeingang
+    8. Bit = Party / Pause
+    """
     def decode(self, byte):
         if byte == 1:
             v = "Sommer"
@@ -94,6 +118,59 @@ class DataHKStat2(DataTypeBase):
             v = "Nacht"
         else:
             v = "0x{0:02X}".format(int(byte))
+        return {self.name: v}
+
+class DataWWStat1(DataTypeBase):
+    """
+    Bits:
+    Automatik
+    Desinfektion
+    Nachladung
+    Ferien
+    Fehler Desinfektion
+    Fehler Fühler
+    Fehler WW bleibt kalt
+    Fehler Anode
+    """
+    def decode(self, byte):
+        flags = []
+        if byte & 0x1:
+            flags.append("AUT")
+        if byte & 0x4:
+            flags.append("NL")
+        if byte & 0x8:
+            flags.append("HOL")
+        if byte & 0x40:
+            flags.append("ErrK")
+        v = "{1} 0x{0:02X}".format(int(byte), "|".join(flags))
+        return {self.name: v}
+        
+class DataWWStat2(DataTypeBase):
+    """
+    Bits:
+    Laden
+    Manuell
+    Nachladen
+    Ausschaltoptimierung
+    Einschaltoptimierung
+    Tag
+    Warm
+    Vorrang
+
+    """
+    def decode(self, byte):
+        flags = []
+        if byte & 0x1:
+            flags.append("LAD")
+        if byte & 0x2:
+            flags.append("MAN")
+        if byte & 0x4:
+            flags.append("NL")
+        if byte & 0x20:
+            flags.append("TAG")
+        if byte & 0x40:
+            flags.append("WARM")
+        v = "{1} 0x{0:02X}".format(int(byte), "|".join(flags))
         return {self.name: v}
 
 class MonBase:
@@ -133,6 +210,12 @@ class MonBase:
         fk = "/".join((self.prefix, k))
         return self.values[fk]
 
+    def get_value_str(self, k):
+        try:
+            return self.get_value(k)
+        except:
+            return "--"
+
     def update_summary(self):
         pass
 
@@ -152,11 +235,7 @@ class MonHeizkreis(MonBase):
         self.datatypes[5] = DataTempRaum("T_Rm", "Raumisttemperatur")
 
     def update_summary(self):
-        def vs(k):
-            try:
-                return self.get_value(k)
-            except:
-                return "--"
+        vs = self.get_value_str
         s = "V: {0}/{1}\nR: {2}/{3}\n{4} {5}".format(vs("T_Vs"), vs("T_Vm"), vs("T_Rs"), vs("T_Rm"), vs("Status1"), vs("Status2"))
         publish_summary(self.name, s)
 
@@ -171,11 +250,7 @@ class MonKessel(MonBase):
         self.datatypes[34] = DataUint8Hex("Brennerstatus", "Brenner Status Bits")
         
     def update_summary(self):
-        def vs(k):
-            try:
-                return self.get_value(k)
-            except:
-                return "--"
+        vs = self.get_value_str
         s = "V: {0}/{1}\nA: {2}".format(vs("T_s"), vs("T_m"), vs("Brenner_s"))
         publish_summary(self.name, s)
 
@@ -191,11 +266,7 @@ class MonSolar(MonBase):
         self.datatypes[11] = DataTempVorl("T_Rlm", "Anlagenrücklauftemperatur")
 
     def update_summary(self):
-        def vs(k):
-            try:
-                return self.get_value(k)
-            except:
-                return "--"
+        vs = self.get_value_str
         s = "B: {0}\nR: {1}".format(vs("T_Bufm"), vs("T_Rlm"))
         publish_summary(self.name, s)
 
@@ -217,6 +288,19 @@ class MonWaermemenge(MonBase):
         self.datatypes[8] = yesterday.byte(1)
         self.datatypes[9] = yesterday.byte(0)
 
+class MonWarmWasser(MonBase):
+    def __init__(self, monid, name):
+        super().__init__(monid, name, 12)
+        self.datatypes[0] = DataWWStat1("Status 1", "Betriebswerte 1")
+        self.datatypes[1] = DataWWStat2("Status 2", "Betriebswerte 2")
+        self.datatypes[2] = DataTempWW("T_s", "Warmwasser Solltemperatur")
+        self.datatypes[3] = DataTempWW("T_m", "Warmwasser Isttemperatur")
+    
+    def update_summary(self):
+        vs = self.get_value_str
+        s = "WW: {0}/{1}\n{2}\n{3}".format(vs("T_s"), vs("T_m"), vs("Status 1"), vs("Status 2"))
+        publish_summary(self.name, s)
+
 CompleteLogamaticType = namedtuple("LogamaticType", "name datalen dataclass shortname")
 LogamaticType = lambda name, datalen, dataclass=None, shortname="": CompleteLogamaticType(name, datalen, dataclass, shortname)
 
@@ -226,7 +310,7 @@ monitor_types = {
     0x81 : LogamaticType("Heizkreis 2", 18, MonHeizkreis),
     0x82 : LogamaticType("Heizkreis 3", 18, MonHeizkreis),
     0x83 : LogamaticType("Heizkreis 4", 18, MonHeizkreis),
-    0x84 : LogamaticType("Warmwasser", 12),
+    0x84 : LogamaticType("Warmwasser", 12, MonWarmWasser),
     0x85 : LogamaticType("Strategie wandhängend", 12),
     0x87 : LogamaticType("Fehlerprotokoll", 42),
     0x88 : LogamaticType("Kessel bodenstehend", 42, MonKessel, "Kessel"),
