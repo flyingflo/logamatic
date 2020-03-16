@@ -288,6 +288,11 @@ class MonWaermemenge(MonBase):
         self.datatypes[8] = yesterday.byte(1)
         self.datatypes[9] = yesterday.byte(0)
 
+    def update_summary(self):
+        vs = self.get_value_str
+        s = "E T0: {0} T1: {1}\ntotal {2}".format(vs("W_today"), vs("W_yesterday"), vs("W_overall"))
+        publish_summary(self.name, s)
+
 class MonWarmWasser(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 12)
