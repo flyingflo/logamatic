@@ -29,6 +29,11 @@ def on_message(client, userdata, msg):
 def on_disconnect(client, userdata, rc):
     log.info("on_disconnect rc %d", rc);
 
+def send_can(pkid, data, rtr=0):
+    mqt = "/heizung/burner/can/raw/send"
+    dstr = " ".join(["{0:x}".format(d) for d in data])
+    mqm = "{rtr:x};{i:x};{d:s}".format(rtr=rtr, i=pkid, d=dstr)
+    return client.publish(mqt, mqm, 1).wait_for_publish()
 
 callback = None
 

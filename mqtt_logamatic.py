@@ -8,7 +8,7 @@ log.setLevel(logging.INFO)
 topic_prefix = "/heizung/logamatic/"
 def on_connect(client, userdata, flags, rc, properties=None):
     log.info("on_connect rc %d", rc);
-    client.subscribe(topic_prefix + "cmd/#")
+    client.subscribe(topic_prefix + "set_cnf/#")
 
 def on_message(client, userdata, msg):
     try:
@@ -21,7 +21,7 @@ def on_disconnect(client, userdata, rc):
     log.info("on_disconnect rc %d", rc);
 
 def publish_value(key, value):
-    client.publish(topic_prefix + "monitor/" + key, value, retain=True)
+    client.publish(topic_prefix + key, value, retain=True)
 
 def publish_summary(name, s):
     client.publish(topic_prefix + "monitor_summary/" + name, s, retain=True)

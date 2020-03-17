@@ -1,3 +1,6 @@
 {
-    "python.pythonPath": "/home/flo/workspace/esp_heizung/logamatic/venv/bin/python3"
+    "python.pythonPath": "/home/flo/workspace/esp_heizung/logamatic/venv/bin/python3",
+    "python.linting.enabled": true,
+    "python.linting.flake8Enabled": false,
+    "python.linting.pylintEnabled": true
 }

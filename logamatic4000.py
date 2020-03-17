@@ -176,11 +176,11 @@ class DataWWStat2(DataTypeBase):
         v = "{1} 0x{0:02X}".format(int(byte), "|".join(flags))
         return {self.name: v}
 
-class MonBase:
+class Obase:
     def __init__(self, monid, name, datalen):
         self.monid = monid
         self.name = name
-        self.prefix = name
+        self.prefix = "base/" + name
         self.datalen = datalen
         self.mem = [None]*datalen
         self.datatypes = [None]*datalen
@@ -195,7 +195,6 @@ class MonBase:
             log.warning("Monitor 0x%x data out of bounds %d, data %s", self.monid, self.datalen, str(databytes))
             return
         self.mem[i:i+blocklen] = databytes[1:]
-        updated = []
         for p in range(i, i+blocklen):
             if not self.datatypes[p]:
                 log.debug("Mon recv %d: no datatype", p)
@@ -226,6 +225,10 @@ class MonBase:
         publish_update(k, self.values[k])
         self.update_summary()
 
+class MonBase(Obase):
+    def __init__(self, monid, name, datalen):
+        super().__init__(monid, name, datalen)
+        self.prefix = "mon/" + name
 
 class MonHeizkreis(MonBase):
     def __init__(self, monid, name):
@@ -309,10 +312,41 @@ class MonWarmWasser(MonBase):
         s = "WW: {0}/{1}\n{2}\n{3}".format(vs("T_s"), vs("T_m"), vs("Status 1"), vs("Status 2"))
         publish_summary(self.name, s)
 
+
+class ConfBase(Obase):
+    def __init__(self, monid, name, datalen):
+        super().__init__(monid, name, datalen)
+        self.prefix = "cnf/" + self.name
+
+class DataHKMode(DataTypeBase):
+    def __init__(self, name, fullname=''):
+        super().__init__(name, fullname=fullname)
+    
+    def decode(self, byte):
+        try:
+            v = ["AUS", "EIN", "AUT"][byte]
+        except KeyError:
+            v = "ERR"
+        return {self.name: v}
+
+
+class ConfHeizkreis(ConfBase):
+    def __init__(self, monid, name):
+        super().__init__(monid, name, 62)
+        self.datatypes[1] = DataTempAussen("T_Sommmer", "Sommer-Winter Schwelle")
+        self.datatypes[2] = DataTempRaum("T_Nacht", "Solltemperatur Nacht")
+        self.datatypes[3] = DataTempRaum("T_Tag", "Solltemperatur Tag")
+        self.datatypes[4] = DataHKMode("Modus", "Betriebsart")
+
+class ConfWarmwasser(ConfBase):
+    def __init__(self, monid, name):
+        super().__init__(monid, name, 41)
+
 CompleteLogamaticType = namedtuple("LogamaticType", "name datalen dataclass shortname")
 LogamaticType = lambda name, datalen, dataclass=None, shortname="": CompleteLogamaticType(name, datalen, dataclass, shortname)
 
 monitor_types = {
+# Monitor data
     # name, overall data length, class
     0x80 : LogamaticType("Heizkreis 1", 18, MonHeizkreis),
     0x81 : LogamaticType("Heizkreis 2", 18, MonHeizkreis),
@@ -345,13 +379,14 @@ monitor_types = {
     0x9E : LogamaticType("Solarfunktion", 54, MonSolar, "Speicher"),
     0x9F : LogamaticType("alternativer Wärmeerzeuger", 42),
 }
-setting_types = {
-    0x07 : LogamaticType("Heizkreis 1", 18),
-    0x08 : LogamaticType("Heizkreis 2", 18),
-    0x09 : LogamaticType("Heizkreis 3", 18),
-    0x0A : LogamaticType("Heizkreis 4", 18),
+conf_types = {
+# Configuration
+    0x07 : LogamaticType("Heizkreis 1", 62, ConfHeizkreis),
+    0x08 : LogamaticType("Heizkreis 2", 62, ConfHeizkreis),
+    0x09 : LogamaticType("Heizkreis 3", 62, ConfHeizkreis),
+    0x0A : LogamaticType("Heizkreis 4", 62, ConfHeizkreis),
     0x0B : LogamaticType("Außenparameter", 12),
-    0x0C : LogamaticType("Warmwasser", 12),
+    0x0C : LogamaticType("Warmwasser", 41, ConfWarmwasser),
     0x0D : LogamaticType("Konfiguration (Modulauswahl)", 18),
     0x0E : LogamaticType("Strategie wandhängend(UBA)", 18),
     0x10 : LogamaticType("Kessel bodenstehend", 18),
@@ -360,13 +395,13 @@ setting_types = {
     0x13 : LogamaticType("Schaltuhr pro Woche Kanal 3", 18),
     0x14 : LogamaticType("Schaltuhr pro Woche Kanal 4", 18),
     0x15 : LogamaticType("Schaltuhr pro Woche Kanal 5", 18),
-    0x16 : LogamaticType("Heizkreis 5", 18),
+    0x16 : LogamaticType("Heizkreis 5", 62, ConfHeizkreis),
     0x17 : LogamaticType("Schaltuhr pro Woche Kanal 6", 18),
-    0x18 : LogamaticType("Heizkreis 6", 18),
+    0x18 : LogamaticType("Heizkreis 6", 62, ConfHeizkreis),
     0x19 : LogamaticType("Schaltuhr pro Woche Kanal 7", 18),
-    0x1A : LogamaticType("Heizkreis 7", 18),
+    0x1A : LogamaticType("Heizkreis 7", 62, ConfHeizkreis),
     0x1B : LogamaticType("Schaltuhr pro Woche Kanal 8", 18),
-    0x1C : LogamaticType("Heizkreis 8", 18),
+    0x1C : LogamaticType("Heizkreis 8", 62, ConfHeizkreis),
     0x1D : LogamaticType("Schaltuhr pro Woche Kanal 9", 18),
     0x1F : LogamaticType("Schaltuhr pro Woche Kanal 10", 18),
     0x20 : LogamaticType("Strategie bodenstehend", 12),
@@ -374,49 +409,47 @@ setting_types = {
     0x26 : LogamaticType("Strategie (FM458)", 12)
 }
 
-mon_objects = {}
-can_recv_queue = queue.Queue()
+data_objects = {}
+recv_queue = queue.Queue()
+RecvMessage = namedtuple("RecvMessage", ("handler", "msg"))
 
 def can_recv_callback(msg):
-    can_recv_queue.put(msg)
+    recv_queue.put(RecvMessage(handle_can_recv, msg))
     log.debug("Incoming CAN id %d data %s", msg.pkid, str(msg.data))
 
-def handle_recv():
-    msg = can_recv_queue.get()
+def handle_can_recv(msg):
     try:
-        if msg.pkid == 0x421 or msg.pkid == 0x400:   # monitor data from address 1 or 0
-            recv_can_monitor(msg)
-        if msg.pkid == 0:
-            recv_can_setting(msg)
+        if msg.pkid & 0x400:   # monitor data 
+            recv_can_message(msg, monitor_types)
+        else:
+            recv_can_message(msg, conf_types)
+        recv_can_handshake(msg)
     except Exception as E:
-        log.error(str(E))
+        log.exception(E)
         raise
-    can_recv_queue.task_done()
 
-def recv_can_setting(msg):
-    log.debug("Can setting %d", msg.pkid)
-
-def recv_can_monitor(msg):
+def recv_can_message(msg, message_types):
     if len(msg.data) != 8:
-        log.warning("CAN monitor message with len != 8")
+        log.warning("CAN message with len != 8")
         return
     oid = msg.data[0]
-    log.debug("Can monitor id=%d oid=0x%x", msg.pkid, oid)
+    log.debug("Can id=%d oid=0x%x", msg.pkid, oid)
 
-    if not oid in mon_objects:
-        if oid in monitor_types:
-            if monitor_types[oid].dataclass:
-                name = monitor_types[oid].shortname if monitor_types[oid].shortname else monitor_types[oid].name
-                mon_objects[oid] = monitor_types[oid].dataclass(oid,name)
-                log.info("New can monitor object 0x%x", oid)
+    if not oid in data_objects:
+        if oid in message_types:
+            if message_types[oid].dataclass:
+                name = message_types[oid].shortname if message_types[oid].shortname else message_types[oid].name
+                data_objects[oid] = message_types[oid].dataclass(oid,name)
+                log.info("New can data object 0x%x", oid)
             else:
                 log.debug("No dataclass implemented for oid 0x%x", oid)
         else:
-            log.warning("Unknown monitor oid 0x%x", oid)
+            pass
+            # log.warning("Unknown monitor oid 0x%x", oid)
 
-    if oid in mon_objects:
-        mon_objects[oid].recv(msg.data[1:])
-        log.debug("Update for oid 0x%x done", oid)
+    if oid in data_objects:
+        data_objects[oid].recv(msg.data[1:])
+        log.debug("Update for mon oid 0x%x done", oid)
 
 def publish_update(k, v):
     log.info("Update: %s = %s", str(k), str(v))
@@ -426,8 +459,8 @@ def publish_update(k, v):
 def update_value_dump():
     global valuestr
     valuestr = ""
-    for ok in sorted(mon_objects):
-        o = mon_objects[ok]
+    for ok in sorted(data_objects):
+        o = data_objects[ok]
         for vk in sorted(o.values):
             valuestr += vk.ljust(30) + "=" + str(o.values[vk]) + "\n"
     log.info("All current values:\n" + valuestr)
@@ -438,15 +471,29 @@ def update_value_dump():
 def publish_summary(name, s):
     mqtt_logamatic.publish_summary(name, s)
 
-def mqtt_command_callback(msg):
-    log.info("Receive MQTT command %s : %s", msg.topic, msg.payload)
-
 def enc_can_id(d, s, mon=0): 
      m5 = 0b11111 
      i = mon << 10 
      i |= (d & m5) << 5 
      i |= s & m5 
      return i 
+
+def send_can_msg(d, s, typ, offs, mem, mon=0, rtr=0):
+    if len(mem) != 6:
+        ValueError("mem must be 6 long")
+    cani = enc_can_id(d, s, mon)
+    cand = [typ, offs, *mem]
+    mqtt_can.send_can(cani, cand, rtr)
+
+def mqtt_command_callback(msg):
+    recv_queue.put(RecvMessage(handle_cmd, msg))
+
+def handle_cmd(msg):
+    log.info("Receive MQTT command %s : %s", msg.topic, msg.payload)
+
+def recv_can_handshake(msg):
+    pass
+
 
 valuefile = None
 valuestr = ""
@@ -459,7 +506,9 @@ if __name__ == "__main__":
     mqtt_logamatic.start(mqtt_command_callback)
     try:
         while True:
-            handle_recv()
+            m = recv_queue.get()
+            m.handler(m.msg)
+            recv_queue.task_done()
     except KeyboardInterrupt:
         mqtt_can.stop()
         mqtt_logamatic.stop()
