@@ -41,7 +41,10 @@ class DataTempWW(DataUInt8):
 
 class DataTempRaum(DataTypeBase):
     def decode(self, byte):
-        return {self.name: int(byte)/2}
+        t = int(byte)/2
+        if t == 55:     # --> means invalid value
+            return {}
+        return {self.name: t}
 
 class DataTempAussen(DataTypeBase):
     def decode(self, byte):
