@@ -541,7 +541,7 @@ def send_can_msg(d, s, typ, offs, mem, mon=0, rtr=0):
     if len(mem) != 6:
         ValueError("mem must be 6 long")
     cani = enc_can_id(d, s, mon)
-    cand = [typ, offs, *mem]
+    cand = [typ, offs] + [mem]
     mqtt_can.send_can(cani, cand, rtr)
 
 def mqtt_command_callback(msg):
