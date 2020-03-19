@@ -1,5 +1,6 @@
 import paho.mqtt.client
 import traceback
+import time
 """
 Helpers for Buderus ECO CAN
 """
@@ -124,6 +125,14 @@ def send_can_msg(d, s, typ, offs, mem, mon=0, rtr=0):
 
     return client.publish(mqt, mqm, 2).wait_for_publish()
 
+def set_HK_mode(hkid, mode):
+    s = 0x11
+    a = 1
+    r = 0x1
+    send_can_msg(r,s,0xfb, 9, [a, 1, 0, 0, 0, 0]) 
+    time.sleep(1) 
+    send_can_msg(r, s, hkid, 0, [0x65, 0x65, 0x65, 0x65, mode, 0x65]) 
+ 
 def request_settings(r):
     "This causes the *r*eiciver to dump its settings"
     s = 17
