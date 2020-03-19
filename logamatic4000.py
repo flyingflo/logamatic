@@ -472,17 +472,26 @@ def get_data_object(oid, message_types):
 
 recv_queue = queue.Queue()
 RecvMessage = namedtuple("RecvMessage", ("handler", "msg"))
+mon_received = 0
+conf_received = 0
 
 def can_recv_callback(msg):
     recv_queue.put(RecvMessage(handle_can_recv, msg))
     log.debug("Incoming CAN id %d data %s", msg.pkid, str(msg.data))
 
 def handle_can_recv(msg):
+    global mon_received, conf_received
+    
+    # Request config, if we are already reading monitor data, but no config.
+    # Config is sent fully at startup. Incremental changes are sent on updates.
+    if conf_received == 0 and mon_received > 16:
+        conf_sender.request_settings()
+
     try:
         if msg.pkid & 0x400:   # monitor data 
-            recv_can_message(msg, monitor_types)
-        else:
-            recv_can_message(msg, conf_types)
+            mon_received += recv_can_message(msg, monitor_types)
+        else:                   # could be conf data
+            conf_received += recv_can_message(msg, conf_types)
         recv_can_handshake(msg)
     except Exception as E:
         log.exception(E)
@@ -498,6 +507,8 @@ def recv_can_message(msg, message_types):
     if o:
         o.recv(msg.data[1:])
         log.debug("Update for mon oid 0x%x done", oid)
+        return True
+    return False
 
 def publish_update(k, v):
     log.info("Update: %s = %s", str(k), str(v))
@@ -610,6 +621,11 @@ class ConfSender():
                 break
             except Exception:
                 log.exception("Error sending config updates")
+            
+    def request_settings(self):
+        "This causes the reiciver to dump its settings"
+        log_send.info("Request all settings")
+        send_can_msg(self.CAN_ID_DEST, self.CAN_ID_SOURCE, 0xfb, 1, [0]*6)
 
 valuefile = None
 valuestr = ""
