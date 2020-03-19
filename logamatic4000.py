@@ -8,6 +8,8 @@ import sys
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
+log_send = logging.getLogger("send_conf")
+log_send.setLevel(logging.DEBUG)
 
 timestamp = time.time
 
@@ -24,6 +26,14 @@ class DataTypeBase():
         Returns:
             dict of decoded values 
         """
+    def encode(self, value):
+        """
+        Args:
+            value to encode
+        Returns:
+            encoded byte, 0x65 means, keep the existing value
+        """
+        return 0x65
 
 class DataUInt8(DataTypeBase):
     def decode(self, byte):
@@ -45,6 +55,8 @@ class DataTempRaum(DataTypeBase):
         if t == 55:     # --> means invalid value
             return {}
         return {self.name: t}
+    def encode(self, value):
+        return int(float(value)*2)
 
 class DataTempAussen(DataTypeBase):
     def decode(self, byte):
@@ -317,17 +329,41 @@ class ConfBase(Obase):
     def __init__(self, monid, name, datalen):
         super().__init__(monid, name, datalen)
         self.prefix = "cnf/" + self.name
+    def encode(self, name, value):
+        dn = None
+        for d in self.datatypes:
+            if d and d.name == name:
+                dn = d
+                break
+        if not dn: 
+            raise ValueError("Data object {} contains no {}".format(self.name, name))
+        i = self.datatypes.index(dn)
+        
+        # Config block offsets are aligned at 7 bytes, however the 7th byte is never received
+        # 0x65 means "empty", which means, keep the current value.
+        mem = [0x65]*6
+        o, mi = divmod(i, 7)
+        o *= 7
+        mem[mi] = dn.encode(value)
+        return o, mem
 
 class DataHKMode(DataTypeBase):
     def __init__(self, name, fullname=''):
         super().__init__(name, fullname=fullname)
     
+    codes = ["AUS", "EIN", "AUT"]
     def decode(self, byte):
         try:
-            v = ["AUS", "EIN", "AUT"][byte]
+            v = self.codes[byte]
         except KeyError:
             v = "ERR"
         return {self.name: v}
+    def encode(self, value):
+        try:
+            v = int(value)
+        except ValueError:
+            v = self.codes.index(value)
+        return v
 
 
 class ConfHeizkreis(ConfBase):
@@ -341,6 +377,8 @@ class ConfHeizkreis(ConfBase):
 class ConfWarmwasser(ConfBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 41)
+        self.datatypes[10] = DataTempWW("T_s", "Solltemperatur")
+        self.datatypes[14] = DataHKMode("Modus", "Betriebsart")
 
 CompleteLogamaticType = namedtuple("LogamaticType", "name datalen dataclass shortname")
 LogamaticType = lambda name, datalen, dataclass=None, shortname="": CompleteLogamaticType(name, datalen, dataclass, shortname)
@@ -409,7 +447,29 @@ conf_types = {
     0x26 : LogamaticType("Strategie (FM458)", 12)
 }
 
+# reverse map: name -> id
+conf_names = { conf_types[k].name: k for k in conf_types }
+
 data_objects = {}
+
+def get_data_object(oid, message_types):
+    if not oid in data_objects:
+        if oid in message_types:
+            if message_types[oid].dataclass:
+                name = message_types[oid].shortname if message_types[oid].shortname else message_types[oid].name
+                data_objects[oid] = message_types[oid].dataclass(oid,name)
+                log.info("New can data object 0x%x", oid)
+            else:
+                log.debug("No dataclass implemented for oid 0x%x", oid)
+        else:
+            pass
+            # log.warning("Unknown monitor oid 0x%x", oid)
+
+    if oid in data_objects:
+        return data_objects[oid]
+    else:
+        return None
+
 recv_queue = queue.Queue()
 RecvMessage = namedtuple("RecvMessage", ("handler", "msg"))
 
@@ -434,21 +494,9 @@ def recv_can_message(msg, message_types):
         return
     oid = msg.data[0]
     log.debug("Can id=%d oid=0x%x", msg.pkid, oid)
-
-    if not oid in data_objects:
-        if oid in message_types:
-            if message_types[oid].dataclass:
-                name = message_types[oid].shortname if message_types[oid].shortname else message_types[oid].name
-                data_objects[oid] = message_types[oid].dataclass(oid,name)
-                log.info("New can data object 0x%x", oid)
-            else:
-                log.debug("No dataclass implemented for oid 0x%x", oid)
-        else:
-            pass
-            # log.warning("Unknown monitor oid 0x%x", oid)
-
-    if oid in data_objects:
-        data_objects[oid].recv(msg.data[1:])
+    o = get_data_object(oid, message_types)
+    if o:
+        o.recv(msg.data[1:])
         log.debug("Update for mon oid 0x%x done", oid)
 
 def publish_update(k, v):
@@ -489,14 +537,85 @@ def mqtt_command_callback(msg):
     recv_queue.put(RecvMessage(handle_cmd, msg))
 
 def handle_cmd(msg):
-    log.info("Receive MQTT command %s : %s", msg.topic, msg.payload)
+    try:
+        value = msg.payload.decode()
+        log.debug("Receive MQTT command %s : %s", msg.topic, value)
+        t = msg.topic.split("/")
+        oname = t[-2]
+        vname = t[-1]
+        conf_sender.send_conf(oname, vname, value)
+    except Exception:
+        log.exception("Handle conf command")
 
 def recv_can_handshake(msg):
-    pass
+    conf_sender.recv_can_handshake(msg)
+    
+class ConfSender():
+    CLOSED = 0
+    OPEN = 1
+    WAIT_OPEN = 2
 
+    CAN_ID_SOURCE = 0x11
+    CAN_ID_DEST = 1
+    def __init__(self):
+        self.state = self.CLOSED
+        self.queue_pending = queue.Queue()
+
+    def recv_can_handshake(self, msg):
+        oid = msg.data[0]
+        off = msg.data[1]
+        if msg.pkid != enc_can_id(1, 1) or oid != 0xfb or off != 0x04:
+            return
+        peer = msg.data[2]
+        flag = msg.data[3]
+        if flag == 0 and peer == self.CAN_ID_SOURCE:
+            self.state = self.OPEN
+            self.OPEN_since = timestamp()
+            log_send.info("Recv CAN handshake OPEN %x %x", peer, flag)
+            self.send_pending()
+
+        elif peer == 0xff and flag == 0:
+            self.state = self.CLOSED
+            log_send.info("Recv CAN handshake CLOSED %x %x", peer, flag)
+        
+        else:
+            log_send.info("Recv CAN handshake _other_ %x %x", peer, flag)
+    
+    def send_conf(self, oname, vname, value):
+        oid = conf_names[oname]
+        obj = get_data_object(oid, conf_types)
+        off, mem = obj.encode(vname, value)
+        self.queue_pending.put((oid, off, mem))
+
+        # The "channel" closes after about 20 seconds, so reuse it, if in time
+        if self.state == self.OPEN and timestamp() - self.OPEN_since < 15:
+            log_send.debug("Still OPEN, send now")
+            self.send_pending()
+        else:
+            # wait for open and send
+            self.send_handshake_open()
+    
+    def send_handshake_open(self):
+        log_send.debug("Send handshake OPEN")
+        send_can_msg(self.CAN_ID_DEST, self.CAN_ID_SOURCE, 0xfb, 9, [self.CAN_ID_DEST, 1, 0, 0, 0, 0])
+
+    def send_pending(self):
+        while True:
+            try:
+                oid, off, mem = self.queue_pending.get_nowait()
+                log_send.info("Update config for 0x%x at 0x%x %s", oid, off, str(mem))
+                send_can_msg(self.CAN_ID_DEST, self.CAN_ID_SOURCE, oid, off, mem)
+                self.queue_pending.task_done()
+            except queue.Empty:
+                break
+            except Exception:
+                log.exception("Error sending config updates")
 
 valuefile = None
 valuestr = ""
+
+conf_sender = ConfSender()
+
 if __name__ == "__main__":
     logging.basicConfig()
     try:
