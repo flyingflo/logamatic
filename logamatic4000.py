@@ -369,7 +369,7 @@ class DataHKMode(DataTypeBase):
 class ConfHeizkreis(ConfBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 62)
-        self.datatypes[1] = DataTempAussen("T_Sommmer", "Sommer-Winter Schwelle")
+        self.datatypes[1] = DataTempAussen("T_Sommer", "Sommer-Winter Schwelle")
         self.datatypes[2] = DataTempRaum("T_Nacht", "Solltemperatur Nacht")
         self.datatypes[3] = DataTempRaum("T_Tag", "Solltemperatur Tag")
         self.datatypes[4] = DataHKMode("Modus", "Betriebsart")
