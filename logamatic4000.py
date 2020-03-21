@@ -26,14 +26,6 @@ class DataTypeBase():
         Returns:
             dict of decoded values 
         """
-    def encode(self, value):
-        """
-        Args:
-            value to encode
-        Returns:
-            encoded byte, 0x65 means, keep the existing value
-        """
-        return 0x65
 
 class DataUInt8(DataTypeBase):
     def decode(self, byte):
@@ -596,6 +588,7 @@ class ConfSender():
         oid = conf_names[oname]
         obj = get_data_object(oid, conf_types)
         off, mem = obj.encode(vname, value)
+        log_send.info("Set config for %x %s/%s to %s", oid, oname, vname, str(value))
         self.queue_pending.put((oid, off, mem))
 
         # The "channel" closes after about 20 seconds, so reuse it, if in time
@@ -614,7 +607,7 @@ class ConfSender():
         while True:
             try:
                 oid, off, mem = self.queue_pending.get_nowait()
-                log_send.info("Update config for 0x%x at 0x%x %s", oid, off, str(mem))
+                log_send.info("Sending config for 0x%x at 0x%x %s", oid, off, str(mem))
                 send_can_msg(self.CAN_ID_DEST, self.CAN_ID_SOURCE, oid, off, mem)
                 self.queue_pending.task_done()
             except queue.Empty:
