@@ -53,6 +53,8 @@ class DataTempRaum(DataTypeBase):
 class DataTempAussen(DataTypeBase):
     def decode(self, byte):
         return {self.name: int.from_bytes(bytes((byte, )), 'little', signed=True)}
+    def encode(self, value):
+        return int(value)
 
 class DataUIntMultiByte(DataTypeBase):
     class ByteHook(DataTypeBase):
