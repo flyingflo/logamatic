@@ -100,9 +100,9 @@ class DataHKStat1(DataTypeBase):
         if byte == 0x04:
             v = "AUT"
         elif byte == 0:
-            v = "MAN0"
+            v = "MAN Aus"
         elif byte == 0x80:
-            v = "MAN8"
+            v = "MAN Ein"
         else:
             v = "0x{0:02X}".format(int(byte))
         return {self.name: v}
@@ -120,7 +120,9 @@ class DataHKStat2(DataTypeBase):
     """
     def decode(self, byte):
         if byte == 1:
-            v = "Sommer"
+            v = "Nacht Sommer"
+        if byte == 3:
+            v = "Tag Sommer"
         elif byte == 2:
             v = "Tag"
         elif byte == 0:
