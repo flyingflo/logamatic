@@ -226,12 +226,8 @@ class Obase:
         except:
             return "--"
 
-    def update_summary(self):
-        pass
-
     def update_event(self, k):
         publish_update(k, self.values[k])
-        self.update_summary()
 
 class MonBase(Obase):
     def __init__(self, monid, name, datalen):
@@ -248,12 +244,6 @@ class MonHeizkreis(MonBase):
         self.datatypes[4] = DataTempRaum("T_Rs", "Raumsolltemperatur")
         self.datatypes[5] = DataTempRaum("T_Rm", "Raumisttemperatur")
 
-    def update_summary(self):
-        vs = self.get_value_str
-        s = "V: {0}/{1}\nR: {2}/{3}\n{4} {5}".format(vs("T_Vs"), vs("T_Vm"), vs("T_Rs"), vs("T_Rm"), vs("Status1"), vs("Status2"))
-        publish_summary(self.name, s)
-
-    
 class MonKessel(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 42)
@@ -263,11 +253,6 @@ class MonKessel(MonBase):
         self.datatypes[8] = DataUInt8("Brenner_s", "Brenner Ansteuerung")
         self.datatypes[34] = DataUint8Hex("Brennerstatus", "Brenner Status Bits")
         
-    def update_summary(self):
-        vs = self.get_value_str
-        s = "V: {0}/{1}\nA: {2}".format(vs("T_s"), vs("T_m"), vs("Brenner_s"))
-        publish_summary(self.name, s)
-
 class MonGeneric(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 24)
@@ -278,11 +263,6 @@ class MonSolar(MonBase):
         super().__init__(monid, name, 54)
         self.datatypes[10] = DataTempVorl("T_Bufm", "Temperatur Speichermitte")
         self.datatypes[11] = DataTempVorl("T_Rlm", "Anlagenrücklauftemperatur")
-
-    def update_summary(self):
-        vs = self.get_value_str
-        s = "B: {0}\nR: {1}".format(vs("T_Bufm"), vs("T_Rlm"))
-        publish_summary(self.name, s)
 
 class MonWaermemenge(MonBase):
     def __init__(self, monid, name):
@@ -302,11 +282,6 @@ class MonWaermemenge(MonBase):
         self.datatypes[8] = yesterday.byte(1)
         self.datatypes[9] = yesterday.byte(0)
 
-    def update_summary(self):
-        vs = self.get_value_str
-        s = "E T0: {0} T1: {1}\ntotal {2}".format(vs("W_today"), vs("W_yesterday"), vs("W_overall"))
-        publish_summary(self.name, s)
-
 class MonWarmWasser(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 12)
@@ -315,12 +290,6 @@ class MonWarmWasser(MonBase):
         self.datatypes[2] = DataTempWW("T_s", "Warmwasser Solltemperatur")
         self.datatypes[3] = DataTempWW("T_m", "Warmwasser Isttemperatur")
     
-    def update_summary(self):
-        vs = self.get_value_str
-        s = "WW: {0}/{1}\n{2}\n{3}".format(vs("T_s"), vs("T_m"), vs("Status 1"), vs("Status 2"))
-        publish_summary(self.name, s)
-
-
 class ConfBase(Obase):
     def __init__(self, monid, name, datalen):
         super().__init__(monid, name, datalen)
@@ -522,9 +491,6 @@ def update_value_dump():
     if valuefile:
         with open(valuefile, "w") as f:
             f.write(valuestr)
-
-def publish_summary(name, s):
-    mqtt_logamatic.publish_summary(name, s)
 
 def enc_can_id(d, s, mon=0): 
      m5 = 0b11111 

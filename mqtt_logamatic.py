@@ -23,9 +23,6 @@ def on_disconnect(client, userdata, rc):
 def publish_value(key, value):
     client.publish(topic_prefix + key, value, retain=True)
 
-def publish_summary(name, s):
-    client.publish(topic_prefix + "monitor_summary/" + name, s, retain=True)
-
 callback = None
 
 client = paho.mqtt.client.Client(client_id="logamatic_mqtt_monitor_and_control")
