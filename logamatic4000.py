@@ -9,7 +9,7 @@ import sys
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 log_send = logging.getLogger("send_conf")
-log_send.setLevel(logging.DEBUG)
+log_send.setLevel(logging.INFO)
 
 timestamp = time.time
 
@@ -423,7 +423,7 @@ def get_data_object(oid, message_types):
             if message_types[oid].dataclass:
                 name = message_types[oid].shortname if message_types[oid].shortname else message_types[oid].name
                 data_objects[oid] = message_types[oid].dataclass(oid,name)
-                log.info("New can data object 0x%x", oid)
+                log.debug("New can data object 0x%x", oid)
             else:
                 log.debug("No dataclass implemented for oid 0x%x", oid)
         else:
@@ -476,7 +476,7 @@ def recv_can_message(msg, message_types):
     return False
 
 def publish_update(k, v):
-    log.info("Update: %s = %s", str(k), str(v))
+    log.debug("Update: %s = %s", str(k), str(v))
     mqtt_logamatic.publish_value(str(k), str(v))
     update_value_dump()
     
@@ -487,7 +487,7 @@ def update_value_dump():
         o = data_objects[ok]
         for vk in sorted(o.values):
             valuestr += vk.ljust(30) + "=" + str(o.values[vk]) + "\n"
-    log.info("All current values:\n" + valuestr)
+    log.debug("All current values:\n" + valuestr)
     if valuefile:
         with open(valuefile, "w") as f:
             f.write(valuestr)
@@ -552,13 +552,13 @@ class ConfSender():
             log_send.info("Recv CAN handshake CLOSED %x %x", peer, flag)
         
         else:
-            log_send.info("Recv CAN handshake _other_ %x %x", peer, flag)
+            log_send.debug("Recv CAN handshake _other_ %x %x", peer, flag)
     
     def send_conf(self, oname, vname, value):
         oid = conf_names[oname]
         obj = get_data_object(oid, conf_types)
         off, mem = obj.encode(vname, value)
-        log_send.info("Set config for %x %s/%s to %s", oid, oname, vname, str(value))
+        log_send.debug("Set config for %x %s/%s to %s", oid, oname, vname, str(value))
         self.queue_pending.put((oid, off, mem))
 
         # The "channel" closes after about 20 seconds, so reuse it, if in time
