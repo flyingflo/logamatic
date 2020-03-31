@@ -439,18 +439,20 @@ recv_queue = queue.Queue()
 RecvMessage = namedtuple("RecvMessage", ("handler", "msg"))
 mon_received = 0
 conf_received = 0
+conf_requested = False
 
 def can_recv_callback(msg):
     recv_queue.put(RecvMessage(handle_can_recv, msg))
     log.debug("Incoming CAN id %d data %s", msg.pkid, str(msg.data))
 
 def handle_can_recv(msg):
-    global mon_received, conf_received
+    global mon_received, conf_received, conf_requested
     
     # Request config, if we are already reading monitor data, but no config.
     # Config is sent fully at startup. Incremental changes are sent on updates.
-    if conf_received == 0 and mon_received > 16:
+    if conf_received == 0 and mon_received > 16 and not conf_requested:
         conf_sender.request_settings()
+        conf_requested = True
 
     try:
         if msg.pkid & 0x400:   # monitor data 
