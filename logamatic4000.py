@@ -15,7 +15,7 @@ timestamp = time.time
 
 class DataTypeBase():
     def __init__(self, name, fullname=""):
-        self.name = name 
+        self.name = name
         self.fullname = fullname if fullname else name
         self.values = {}
 
@@ -24,7 +24,7 @@ class DataTypeBase():
         Args:
             byte to decode
         Returns:
-            dict of decoded values 
+            dict of decoded values
         """
 
 class DataUInt8(DataTypeBase):
@@ -59,13 +59,13 @@ class DataTempAussen(DataTypeBase):
 class DataUIntMultiByte(DataTypeBase):
     class ByteHook(DataTypeBase):
         def __init__(self, parent, byteindex):
-            self.parent = parent 
+            self.parent = parent
             self.byteindex = byteindex
 
         @property
         def name(self):
             return self.parent.name + "byte " + str(self.byteindex)
-            
+
         def decode(self, byte):
             self.parent.bytesvalues[self.byteindex] = byte
             # Update the complete value after all bytes have been received.
@@ -155,7 +155,7 @@ class DataWWStat1(DataTypeBase):
             flags.append("ErrK")
         v = "{1} 0x{0:02X}".format(int(byte), "|".join(flags))
         return {self.name: v}
-        
+
 class DataWWStat2(DataTypeBase):
     """
     Bits:
@@ -194,7 +194,7 @@ class Obase:
         self.datatypes = [None]*datalen
         self.values = {}
         self.value_timestamps = {}
-        
+
     def recv(self, databytes):
         blocklen = 6
         now = timestamp()
@@ -252,7 +252,7 @@ class MonKessel(MonBase):
         self.datatypes[7] = DataUint8Hex("Kesselstatus", "Kessel Betrieb Bits")
         self.datatypes[8] = DataUInt8("Brenner_s", "Brenner Ansteuerung")
         self.datatypes[34] = DataUint8Hex("Brennerstatus", "Brenner Status Bits")
-        
+
 class MonGeneric(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 24)
@@ -289,7 +289,7 @@ class MonWarmWasser(MonBase):
         self.datatypes[1] = DataWWStat2("Status 2", "Betriebswerte 2")
         self.datatypes[2] = DataTempWW("T_s", "Warmwasser Solltemperatur")
         self.datatypes[3] = DataTempWW("T_m", "Warmwasser Isttemperatur")
-    
+
 class ConfBase(Obase):
     def __init__(self, monid, name, datalen):
         super().__init__(monid, name, datalen)
@@ -300,10 +300,10 @@ class ConfBase(Obase):
             if d and d.name == name:
                 dn = d
                 break
-        if not dn: 
+        if not dn:
             raise ValueError("Data object {} contains no {}".format(self.name, name))
         i = self.datatypes.index(dn)
-        
+
         # Config block offsets are aligned at 7 bytes, however the 7th byte is never received
         # 0x65 means "empty", which means, keep the current value.
         mem = [0x65]*6
@@ -315,7 +315,7 @@ class ConfBase(Obase):
 class DataHKMode(DataTypeBase):
     def __init__(self, name, fullname=''):
         super().__init__(name, fullname=fullname)
-    
+
     codes = ["AUS", "EIN", "AUT"]
     def decode(self, byte):
         try:
@@ -447,7 +447,7 @@ def can_recv_callback(msg):
 
 def handle_can_recv(msg):
     global mon_received, conf_received, conf_requested
-    
+
     # Request config, if we are already reading monitor data, but no config.
     # Config is sent fully at startup. Incremental changes are sent on updates.
     if conf_received == 0 and mon_received > 16 and not conf_requested:
@@ -455,7 +455,7 @@ def handle_can_recv(msg):
         conf_requested = True
 
     try:
-        if msg.pkid & 0x400:   # monitor data 
+        if msg.pkid & 0x400:   # monitor data
             mon_received += recv_can_message(msg, monitor_types)
         else:                   # could be conf data
             conf_received += recv_can_message(msg, conf_types)
@@ -481,7 +481,7 @@ def publish_update(k, v):
     log.debug("Update: %s = %s", str(k), str(v))
     mqtt_logamatic.publish_value(str(k), str(v))
     update_value_dump()
-    
+
 def update_value_dump():
     global valuestr
     valuestr = ""
@@ -494,12 +494,12 @@ def update_value_dump():
         with open(valuefile, "w") as f:
             f.write(valuestr)
 
-def enc_can_id(d, s, mon=0): 
-     m5 = 0b11111 
-     i = mon << 10 
-     i |= (d & m5) << 5 
-     i |= s & m5 
-     return i 
+def enc_can_id(d, s, mon=0):
+     m5 = 0b11111
+     i = mon << 10
+     i |= (d & m5) << 5
+     i |= s & m5
+     return i
 
 def send_can_msg(d, s, typ, offs, mem, mon=0, rtr=0):
     if len(mem) != 6:
@@ -524,7 +524,7 @@ def handle_cmd(msg):
 
 def recv_can_handshake(msg):
     conf_sender.recv_can_handshake(msg)
-    
+
 class ConfSender():
     CLOSED = 0
     OPEN = 1
@@ -552,10 +552,10 @@ class ConfSender():
         elif peer == 0xff and flag == 0:
             self.state = self.CLOSED
             log_send.info("Recv CAN handshake CLOSED %x %x", peer, flag)
-        
+
         else:
             log_send.debug("Recv CAN handshake _other_ %x %x", peer, flag)
-    
+
     def send_conf(self, oname, vname, value):
         oid = conf_names[oname]
         obj = get_data_object(oid, conf_types)
@@ -570,7 +570,7 @@ class ConfSender():
         else:
             # wait for open and send
             self.send_handshake_open()
-    
+
     def send_handshake_open(self):
         log_send.debug("Send handshake OPEN")
         send_can_msg(self.CAN_ID_DEST, self.CAN_ID_SOURCE, 0xfb, 9, [self.CAN_ID_DEST, 1, 0, 0, 0, 0])
@@ -586,9 +586,9 @@ class ConfSender():
                 break
             except Exception:
                 log.exception("Error sending config updates")
-            
+
     def request_settings(self):
-        "This causes the reiciver to dump its settings"
+        "This causes the receiver to dump its settings"
         log_send.info("Request all settings")
         send_can_msg(self.CAN_ID_DEST, self.CAN_ID_SOURCE, 0xfb, 1, [0]*6)
 
