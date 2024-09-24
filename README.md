@@ -43,3 +43,9 @@ Example output:
 /heizung/logamatic/mon/Heizkreis 1/Status1 MAN Aus
 /heizung/logamatic/mon/Heizkreis 1/Status2 Nacht
 ```
+
+## Usage:
+Check the mqtt_*.py files and replace "pi3.lan" with the hostname of your MQTT broker.
+```
+python3 logamatic4000.py
+```
