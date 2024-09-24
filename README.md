@@ -43,3 +43,9 @@ Example output:
 /heizung/logamatic/mon/Heizkreis 1/Status1 MAN Aus
 /heizung/logamatic/mon/Heizkreis 1/Status2 Nacht
 ```
+
+## Usage:
+
+```
+python3 logamatic4000.py
+```
