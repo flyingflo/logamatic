@@ -45,7 +45,7 @@ Example output:
 ```
 
 ## Usage:
-
+Check the mqtt_*.py files and replace "pi3.lan" with the hostname of your MQTT broker.
 ```
 python3 logamatic4000.py
 ```
