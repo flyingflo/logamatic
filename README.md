@@ -11,6 +11,14 @@ Those interfaces translate and buffer several aspects of the original protocol.
 
 This project encodes and the decodes the raw messages on the CAN bus, not the "service key protocol" or the like.
 
+## Requirements
+
+You need a MQTT broker. For example mosquitto:
+
+`sudo apt install mosquitto mosquitto-clients`
+
+
+
 ## Modules:
 
 This program has only MQTT interfaces. 
