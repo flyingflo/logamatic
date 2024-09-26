@@ -1,6 +1,10 @@
 
 import paho.mqtt.client
 import logging
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -34,7 +38,11 @@ def start(deliver_callback):
     log.info("Start")
     global callback
     callback = deliver_callback
-    rc = client.connect("pi3.lan")
+
+    if os.getenv('MQTT_WRITE_USERNAME') and os.getenv('MQTT_WRITE_PASSWORD'):
+        client.username_pw_set(username=os.getenv('MQTT_WRITE_USERNAME'), password=os.getenv('MQTT_WRITE_PASSWORD'))
+    rc = client.connect(os.getenv('MQTT_WRITE_HOST', 'localhost'))
+
     log.info("client.connect %d", rc)
     client.loop_start()
 

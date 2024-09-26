@@ -3,6 +3,10 @@ A CAN bus gateway over MQTT
 """
 import paho.mqtt.client
 import logging
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -46,7 +50,7 @@ def start(deliver_callback):
     log.info("Start MQTT CAN receiver")
     global callback
     callback = deliver_callback
-    rc = client.connect("pi3.lan")
+    rc = client.connect(os.getenv('MQTT_READ_HOST', 'localhost'))
     log.info("client.connect %d", rc)
     client.loop_start()
 
