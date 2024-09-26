@@ -9,7 +9,7 @@ load_dotenv()
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
-topic_prefix = "/heizung/logamatic/"
+topic_prefix = os.getenv('TOPIC_PREFIX', "/heizung/logamatic/")
 def on_connect(client, userdata, flags, rc, properties=None):
     log.info("on_connect rc %d", rc);
     client.subscribe(topic_prefix + "set_cnf/#")
