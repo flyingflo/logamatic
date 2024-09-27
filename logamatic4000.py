@@ -38,6 +38,9 @@ class DataUint8Hex(DataTypeBase):
 class DataTempVorl(DataUInt8):
     pass
 
+class DataTempRueckl(DataUInt8):
+    pass
+
 class DataTempWW(DataUInt8):
     pass
 
@@ -253,6 +256,13 @@ class MonKessel(MonBase):
         self.datatypes[8] = DataUInt8("Brenner_s", "Brenner Ansteuerung")
         self.datatypes[34] = DataUint8Hex("Brennerstatus", "Brenner Status Bits")
 
+class MonKesselHaengend(MonBase):
+    def __init__(self, monid, name):
+        super().__init__(monid, name, 60)
+        self.datatypes[6] = DataTempVorl("T_s", "Kesselvorlauf-Solltemperatur")
+        self.datatypes[7] = DataTempVorl("T_m", "Kesselvorlauf-Isttemperatur")
+        self.datatypes[20] = DataTempRueckl("T_rm", "Kesselrücklauf-Isttemperatur")
+
 class MonGeneric(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 24)
@@ -367,14 +377,14 @@ monitor_types = {
     0x8E : LogamaticType("Heizkreis 9", 18, MonHeizkreis),
     0x8F : LogamaticType("Strategie bodenstehend", 30),
     0x90 : LogamaticType("LAP", 18),
-    0x92 : LogamaticType("Kessel 1 wandhängend", 60),
-    0x93 : LogamaticType("Kessel 2 wandhängend", 60),
-    0x94 : LogamaticType("Kessel 3 wandhängend", 60),
-    0x95 : LogamaticType("Kessel 4 wandhängend", 60),
-    0x96 : LogamaticType("Kessel 5 wandhängend", 60),
-    0x97 : LogamaticType("Kessel 6 wandhängend", 60),
-    0x98 : LogamaticType("Kessel 7 wandhängend", 60),
-    0x99 : LogamaticType("Kessel 8 wandhängend", 60),
+    0x92 : LogamaticType("Kessel 1 wandhängend", 60, MonKesselHaengend, "Kessel"),
+    0x93 : LogamaticType("Kessel 2 wandhängend", 60, MonKesselHaengend, "Kessel"),
+    0x94 : LogamaticType("Kessel 3 wandhängend", 60, MonKesselHaengend, "Kessel"),
+    0x95 : LogamaticType("Kessel 4 wandhängend", 60, MonKesselHaengend, "Kessel"),
+    0x96 : LogamaticType("Kessel 5 wandhängend", 60, MonKesselHaengend, "Kessel"),
+    0x97 : LogamaticType("Kessel 6 wandhängend", 60, MonKesselHaengend, "Kessel"),
+    0x98 : LogamaticType("Kessel 7 wandhängend", 60, MonKesselHaengend, "Kessel"),
+    0x99 : LogamaticType("Kessel 8 wandhängend", 60, MonKesselHaengend, "Kessel"),
     0x9A : LogamaticType("KNX FM446",60),
     0x9B : LogamaticType("Wärmemenge", 36, MonWaermemenge),
     0x9C : LogamaticType("Störmeldemodul", 6),
