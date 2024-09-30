@@ -261,12 +261,16 @@ class MonKesselHaengend(MonBase):
         super().__init__(monid, name, 60)
         self.datatypes[6] = DataTempVorl("T_s", "Kesselvorlauf-Solltemperatur")
         self.datatypes[7] = DataTempVorl("T_m", "Kesselvorlauf-Isttemperatur")
+        self.datatypes[14] = DataUint8Hex("UBA", "HD-Mode der UBA")
         self.datatypes[20] = DataTempRueckl("T_rm", "Kesselrücklauf-Isttemperatur")
 
 class MonGeneric(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 24)
         self.datatypes[0] = DataTempAussen("T_Aus", "Außentemperatur")
+        self.datatypes[18] = DataTempVorl("T_Vs", "Anlagenvorlaufsolltemperatur")
+        self.datatypes[19] = DataTempVorl("T_Vm", "Anlagenvorlaufisttemperatur")
+        self.datatypes[23] = DataTempVorl("T_Vrm", "Regelgerätevorlaufisttemperatur")
 
 class MonSolar(MonBase):
     def __init__(self, monid, name):
