@@ -52,8 +52,17 @@ Example output:
 /heizung/logamatic/mon/Heizkreis 1/Status2 Nacht
 ```
 
+## Installation
+
+```
+python3 -m venv myenv
+source myenv/bin/activate
+pip3 install -r requirments.txt
+```
+
 ## Usage:
-Check the mqtt_*.py files and replace "pi3.lan" with the hostname of your MQTT broker.
+Check .env.example if you want to overwrite some default settings and rename .env.example to .env
+
 ```
 python3 logamatic4000.py
 ```
