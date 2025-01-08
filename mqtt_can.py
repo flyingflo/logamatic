@@ -50,7 +50,9 @@ def start(deliver_callback):
     log.info("Start MQTT CAN receiver")
     global callback
     callback = deliver_callback
-    rc = client.connect(os.getenv('MQTT_READ_HOST', 'localhost'))
+    if os.getenv('MQTT_READ_USERNAME') and os.getenv('MQTT_READ_PASSWORD'):
+        client.username_pw_set(username=os.getenv('MQTT_READ_USERNAME'), password=os.getenv('MQTT_READ_PASSWORD'))
+    rc = client.connect(os.getenv('MQTT_WRITE_HOST'),int(os.getenv('MQTT_WRITE_PORT')))
     log.info("client.connect %d", rc)
     client.loop_start()
 
