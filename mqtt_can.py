@@ -67,4 +67,3 @@ def test_callback(msg):
 if __name__ == "__main__":
     logging.basicConfig()
     start(test_callback)
-    
