@@ -130,6 +130,8 @@ class DataHKStat1(DataTypeBase):
     def decode(self, byte):
         if byte == 0x01:
             v = "Aus-Opt"
+        elif byte == 0:
+            v = "Manuell Aus"
         elif byte == 0x02:
             v = "Ein-Opt"
         elif byte == 0x04:
@@ -143,7 +145,7 @@ class DataHKStat1(DataTypeBase):
         elif byte == 0x40:
             v = "Frostschutz"
         elif byte == 0x80:
-            v = "Manuell"
+            v = "Manuell Ein"
         else:
             v = "0x{0:02X}".format(int(byte))
         return {self.name: v}
