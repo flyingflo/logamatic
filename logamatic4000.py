@@ -59,6 +59,34 @@ class DataTempAussen(DataTypeBase):
     def encode(self, value):
         return int(value)
 
+class DataTempCollector(DataTypeBase):
+    class ByteHook(DataTypeBase):
+        def __init__(self, parent, byteindex):
+            self.parent = parent
+            self.byteindex = byteindex
+
+        @property
+        def name(self):
+            return self.parent.name + " byte " + str(self.byteindex)
+
+        def decode(self, byte):
+            self.parent.bytesvalues[self.byteindex] = byte
+            # If both bytes have been received (index 0 and 1), calculate the value
+            if self.byteindex == 0:  # With byte 0, the value is complete
+                # Calculation: (byte1 * 256 + byte0) / 10
+                coltemp_value = (self.parent.bytesvalues[1] * 256 + self.parent.bytesvalues[0]) / 10
+                return {self.parent.name: coltemp_value}
+            else:
+                return {}
+
+    def __init__(self, bytecount, name, fullname=''):
+        super().__init__(name, fullname=fullname)
+        self.bytesvalues = [0] * bytecount
+        self.bytehooks = [self.ByteHook(self, i) for i in range(bytecount)]
+
+    def byte(self, i):
+        return self.bytehooks[i]
+
 class DataUIntMultiByte(DataTypeBase):
     class ByteHook(DataTypeBase):
         def __init__(self, parent, byteindex):
@@ -100,12 +128,22 @@ class DataHKStat1(DataTypeBase):
     Manuell
     """
     def decode(self, byte):
-        if byte == 0x04:
-            v = "AUT"
-        elif byte == 0:
-            v = "MAN Aus"
+        if byte == 0x01:
+            v = "Aus-Opt"
+        elif byte == 0x02:
+            v = "Ein-Opt"
+        elif byte == 0x04:
+            v = "Auto"
+        elif byte == 0x08:
+            v = "WW-Vorrang"
+        elif byte == 0x10:
+            v = "Estrich-Tr"
+        elif byte == 0x20:
+            v = "Ferien"
+        elif byte == 0x40:
+            v = "Frostschutz"
         elif byte == 0x80:
-            v = "MAN Ein"
+            v = "Manuell"
         else:
             v = "0x{0:02X}".format(int(byte))
         return {self.name: v}
@@ -277,6 +315,10 @@ class MonSolar(MonBase):
         super().__init__(monid, name, 54)
         self.datatypes[10] = DataTempVorl("T_Bufm", "Temperatur Speichermitte")
         self.datatypes[11] = DataTempVorl("T_Rlm", "Anlagenrücklauftemperatur")
+        
+        coltemp = DataTempCollector(2, "T_Col", "Collectortemperatur")
+        self.datatypes[3] = coltemp.byte(1)
+        self.datatypes[4] = coltemp.byte(0)
 
 class MonWaermemenge(MonBase):
     def __init__(self, monid, name):
@@ -393,7 +435,7 @@ monitor_types = {
     0x9B : LogamaticType("Wärmemenge", 36, MonWaermemenge),
     0x9C : LogamaticType("Störmeldemodul", 6),
     0x9D : LogamaticType("Unterstation", 6),
-    0x9E : LogamaticType("Solarfunktion", 54, MonSolar, "Speicher"),
+    0x9E : LogamaticType("Solarfunktion", 54, MonSolar, "Solar"),
     0x9F : LogamaticType("alternativer Wärmeerzeuger", 42),
 }
 conf_types = {
