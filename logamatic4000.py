@@ -131,11 +131,11 @@ class DataHKStat1(DataTypeBase):
         if byte == 0x04:
             v = "Auto"
         elif byte == 0:
-            v = "Aus"
+            v = "Manuell Aus"
         elif byte == 0x01:
-            v = "Ausschalt-Opt"
+            v = "Ausschaltopt."
         elif byte == 0x02:
-            v = "Einschalt-Opt"
+            v = "Einschaltopt."
         elif byte == 0x08:
             v = "WW-Vorrang"
         elif byte == 0x10:
