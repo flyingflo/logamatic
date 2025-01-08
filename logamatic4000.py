@@ -128,14 +128,14 @@ class DataHKStat1(DataTypeBase):
     Manuell
     """
     def decode(self, byte):
-        if byte == 0x01:
-            v = "Aus-Opt"
-        elif byte == 0:
-            v = "Manuell Aus"
-        elif byte == 0x02:
-            v = "Ein-Opt"
-        elif byte == 0x04:
+        if byte == 0x04:
             v = "Auto"
+        elif byte == 0:
+            v = "Aus"
+        elif byte == 0x01:
+            v = "Ausschalt-Opt"
+        elif byte == 0x02:
+            v = "Einschalt-Opt"
         elif byte == 0x08:
             v = "WW-Vorrang"
         elif byte == 0x10:
