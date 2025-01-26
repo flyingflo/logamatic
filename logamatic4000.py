@@ -35,6 +35,9 @@ class DataUint8Hex(DataTypeBase):
     def decode(self, byte):
         return {self.name: "0x{0:02X}".format(int(byte))}
 
+class DataInteger(DataUInt8):
+    pass
+
 class DataTempVorl(DataUInt8):
     pass
 
@@ -58,6 +61,73 @@ class DataTempAussen(DataTypeBase):
         return {self.name: int.from_bytes(bytes((byte, )), 'little', signed=True)}
     def encode(self, value):
         return int(value)
+
+class DataTempSol(DataTypeBase):
+    def decode(self, byte):
+        t = int(byte)
+        if t == 110:     # --> means not connected
+            return {}
+        return {self.name: t}
+    def encode(self, value):
+        return int(value)
+
+class DataTempCollector(DataTypeBase):
+    class ByteHook(DataTypeBase):
+        def __init__(self, parent, byteindex):
+            self.parent = parent
+            self.byteindex = byteindex
+
+        @property
+        def name(self):
+            return self.parent.name + " byte " + str(self.byteindex)
+
+        def decode(self, byte):
+            self.parent.bytesvalues[self.byteindex] = byte
+
+            # Wenn beide Bytes empfangen wurden (Index 0 und 1), berechne den Wert
+            if self.byteindex == 0:  # Bei byte 0 ist der Wert vollständig
+                # Berechnung: (byte1 * 256 + byte0) / 10
+                coltemp_value = (self.parent.bytesvalues[1] * 256 + self.parent.bytesvalues[0]) / 10
+                return {self.parent.name: coltemp_value}
+            else:
+                return {}
+
+    def __init__(self, bytecount, name, fullname=''):
+        super().__init__(name, fullname=fullname)
+        self.bytesvalues = [0] * bytecount
+        self.bytehooks = [self.ByteHook(self, i) for i in range(bytecount)]
+
+    def byte(self, i):
+        return self.bytehooks[i]
+
+class DataSolarHours(DataTypeBase):
+    class ByteHook(DataTypeBase):
+        def __init__(self, parent, byteindex):
+            self.parent = parent
+            self.byteindex = byteindex
+
+        @property
+        def name(self):
+            return self.parent.name + " byte " + str(self.byteindex)
+
+        def decode(self, byte):
+            self.parent.bytesvalues[self.byteindex] = byte
+
+            # Wenn alle Bytes empfangen wurden (Index 0, 1 und 2), berechne den Wert
+            if self.byteindex == 0:  # Bei byte 0 ist der Wert vollst  ndig
+                # Berechnung: (Byte2 * 65536 + Byte1 * 256 + Byte0) / 60 (Pumpenlaufzeit)
+                solarhours_value = round(((self.parent.bytesvalues[2] * 65536 + self.parent.bytesvalues[1] * 256 + self.parent.bytesvalues[0]) / 60), 2)
+                return {self.parent.name: solarhours_value}
+            else:
+                return {}
+
+    def __init__(self, bytecount, name, fullname=''):
+        super().__init__(name, fullname=fullname)
+        self.bytesvalues = [0] * bytecount
+        self.bytehooks = [self.ByteHook(self, i) for i in range(bytecount)]
+
+    def byte(self, i):
+        return self.bytehooks[i]
 
 class DataUIntMultiByte(DataTypeBase):
     class ByteHook(DataTypeBase):
@@ -87,28 +157,91 @@ class DataUIntMultiByte(DataTypeBase):
     def byte(self, i):
         return self.bytehooks[i]
 
+class DataSlot(DataTypeBase):
+    """
+	Wert =  1: frei
+	Wert =  2: ZM432 (Kessel für 4311)
+	Wert =  3: FM442 (2x Heizkreis)
+	Wert =  4: FM441 (1x Heizkreis + 1x Warmwasser)
+	Wert =  5: FM447 (Strategie)
+	Wert =  6: ZM432 (Kessel für 4211, Warmwasser + 1x ungemischter Heizkreis)
+	Wert =  7: FM445 (LAP - Modul)
+	Wert =  8: FM451 (KSE1)
+	Wert =  9: FM454 (KSE4)
+	Wert = 10: ZM424 (Kessel für 4111,Heizkreise,WW)
+	Wert = 11: UBA
+	Wert = 12: FM452 (KSE2)
+	Wert = 13: FM448 (Störmeldemodul)
+	Wert = 14: ZM433 (Unterstation mit Pumpe und 1 x gemischter Heizkreis)
+	Wert = 15: FM446 EIB - Modul
+	Wert = 16: FM443 Solarmodul
+	Wert = 17: FM455 (KSE5 ?)
+	Wert = 21: FM444 Alternativer Wärmeerzeuger - Modul
+	"""
+    def decode(self, byte):
+        value_dict = {
+            1: "frei",
+            2: "ZM432",
+            3: "FM442",
+            4: "FM441",
+            5: "FM447",
+            6: "ZM432",
+            7: "FM445",
+            8: "FM451",
+            9: "FM454",
+            10: "ZM424",
+            11: "UBA",
+            12: "FM452",
+            13: "FM448",
+            14: "ZM433",
+            15: "FM446",
+            16: "FM443",
+            17: "FM455",
+            21: "FM444"
+        }
+
+        if byte in value_dict:
+            v = value_dict[byte]
+
+        else:
+            return{}
+
+        return {self.name: v}
+
 class DataHKStat1(DataTypeBase):
     """
-    Bits:
-    Ausschaltoptimierung
-    Einschaltoptimierung
-    Automatik
-    Warmwasservorrang
-    Estrichtrocknung
-    Ferien
-    Frostschutz
-    Manuell
+    1. Bit = Ausschaltoptimierung
+    2. Bit = Einschaltoptimierung
+    3. Bit = Automatik
+    4. Bit = Warmwasservorrang
+    5. Bit = Estrichtrocknung
+    6. Bit = Ferien
+    7. Bit = Frostschutz
+    8. Bit = Manuell
     """
     def decode(self, byte):
-        if byte == 0x04:
-            v = "AUT"
-        elif byte == 0:
-            v = "MAN Aus"
-        elif byte == 0x80:
-            v = "MAN Ein"
-        else:
-            v = "0x{0:02X}".format(int(byte))
-        return {self.name: v}
+        flags = []
+        if byte & 0x01:
+            flags.append("Ausschaltoptimierung")
+        if byte & 0x02:
+            flags.append("Einschaltoptimierung")
+        if byte & 0x04:
+            flags.append("Automatik")
+        if byte & 0x08:
+            flags.append("Warmwasservorrang")
+        if byte & 0x10:
+            flags.append("Estrichtrocknung")
+        if byte & 0x20:
+            flags.append("Ferien")
+        if byte & 0x40:
+            flags.append("Frostschutz")
+        if byte & 0x80:
+            flags.append("Manuell")
+        
+        if not flags:
+            return {self.name: "none"}
+        
+        return {self.name: ", ".join(flags)}
 
 class DataHKStat2(DataTypeBase):
     """
@@ -119,73 +252,209 @@ class DataHKStat2(DataTypeBase):
     5. Bit = Fehler Vorlauffühler
     6. Bit = maximaler Vorlauf
     7. Bit = externer Störeingang
-    8. Bit = Party / Pause
+    8. Bit = Party
     """
     def decode(self, byte):
-        if byte == 1:
-            v = "Nacht Sommer"
-        if byte == 3:
-            v = "Tag Sommer"
-        elif byte == 2:
-            v = "Tag"
-        elif byte == 0:
-            v = "Nacht"
-        else:
-            v = "0x{0:02X}".format(int(byte))
-        return {self.name: v}
+        flags = []
+        if byte & 0x01:
+            flags.append("Sommer")
+        if byte & 0x02:
+            flags.append("Tag")
+        if byte & 0x04:
+            flags.append("keine Kommunikation mit FB")
+        if byte & 0x08:
+            flags.append("FB fehlerhaft")
+        if byte & 0x10:
+            flags.append("Fehler Vorlauffühler")
+        if byte & 0x20:
+            flags.append("maximaler Vorlauf")
+        if byte & 0x40:
+            flags.append("externer Störeingang")
+        if byte & 0x80:
+            flags.append("Party")
+        
+        if not flags:
+            return {self.name: "none"}
+        
+        return {self.name: ", ".join(flags)}
 
 class DataWWStat1(DataTypeBase):
     """
-    Bits:
-    Automatik
-    Desinfektion
-    Nachladung
-    Ferien
-    Fehler Desinfektion
-    Fehler Fühler
-    Fehler WW bleibt kalt
-    Fehler Anode
+    1. Bit = Automatik
+    2. Bit = Desinfektion
+    3. Bit = Nachladung
+    4. Bit = Ferien
+    5. Bit = Fehler Desinfektion
+    6. Bit = Fehler Fühler
+    7. Bit = Fehler WW bleibt kalt
+    8. Bit = Fehler Anode
     """
     def decode(self, byte):
         flags = []
-        if byte & 0x1:
-            flags.append("AUT")
-        if byte & 0x4:
-            flags.append("NL")
-        if byte & 0x8:
-            flags.append("HOL")
+        if byte & 0x01:
+            flags.append("Automatik")
+        if byte & 0x02:
+            flags.append("Desinfektion")
+        if byte & 0x04:
+            flags.append("Nachladung")
+        if byte & 0x08:
+            flags.append("Ferien")
+        if byte & 0x10:
+            flags.append("Fehler Desinfektion")
+        if byte & 0x20:
+            flags.append("Fehler Fühler")
         if byte & 0x40:
-            flags.append("ErrK")
-        v = "{1} 0x{0:02X}".format(int(byte), "|".join(flags))
-        return {self.name: v}
+            flags.append("Fehler WW bleibt kalt")
+        if byte & 0x80:
+            flags.append("Fehler Anode")
+        
+        if not flags:
+            return {self.name: "none"}
+        
+        return {self.name: ", ".join(flags)}
 
 class DataWWStat2(DataTypeBase):
     """
-    Bits:
-    Laden
-    Manuell
-    Nachladen
-    Ausschaltoptimierung
-    Einschaltoptimierung
-    Tag
-    Warm
-    Vorrang
-
+    1. Bit = Laden
+    2. Bit = Manuell
+    3. Bit = Nachladen
+    4. Bit = Ausschaltoptimierung
+    5. Bit = Einschaltoptimierung
+    6. Bit = Tag
+    7. Bit = Warm
+    8. Bit = Vorrang
     """
     def decode(self, byte):
         flags = []
-        if byte & 0x1:
-            flags.append("LAD")
-        if byte & 0x2:
-            flags.append("MAN")
-        if byte & 0x4:
-            flags.append("NL")
+        if byte & 0x01:
+            flags.append("Laden")
+        if byte & 0x02:
+            flags.append("Manuell")
+        if byte & 0x04:
+            flags.append("Nachladen")
+        if byte & 0x08:
+            flags.append("Ausschaltoptimierung")
+        if byte & 0x10:
+            flags.append("Einschaltoptimierung")
         if byte & 0x20:
-            flags.append("TAG")
+            flags.append("Tag")
         if byte & 0x40:
-            flags.append("WARM")
-        v = "{1} 0x{0:02X}".format(int(byte), "|".join(flags))
+            flags.append("Warm")
+        if byte & 0x80:
+            flags.append("Vorrang")
+
+        if not flags:
+            return {self.name: "none"}
+
+        return {self.name: ", ".join(flags)}
+
+class DataSolStat1(DataTypeBase):
+    """
+    Wert = 1: Stillstand
+    Wert = 2: Low Flow
+    Wert = 3: High Flow
+    Wert = 4: HAND ein
+    Wert = 5: Umschalt-Check
+    """
+    def decode(self, byte):
+        if byte == 1:
+            v = "Stillstand"
+        elif byte == 2:
+            v = "Low Flow"
+        elif byte == 3:
+            v = "High Flow"
+        elif byte == 4:
+            v = "HAND ein"
+        elif byte == 5:
+            v = "Umschalt-Check"
+        elif byte == 0: # --> means not connected
+            return {}
+
         return {self.name: v}
+
+class DataSolBW1(DataTypeBase):
+    """
+    1. Bit = Fehler Einstellung Hysterese
+    2. Bit = Speicher 2 auf max. Temperatur
+    3. Bit = Speicher 1 auf max. Temperatur
+    4. Bit = Kollektor auf max. Temperatur
+    """
+    def decode(self, byte):
+        flags = []
+        if byte & 0x01:
+            flags.append("Fehler Einstellung Hysterese")
+        if byte & 0x02:
+            flags.append("Speicher 2 auf max. Temperatur")
+        if byte & 0x04:
+            flags.append("Speicher 1 auf max. Temperatur")
+        if byte & 0x08:
+            flags.append("Kollektor auf max. Temperatur")
+
+        if not flags:
+            return {self.name: "none"}
+
+        return {self.name: ", ".join(flags)}
+
+class DataSolBW2(DataTypeBase):
+    """
+    1. Bit = Fehler Fühler Anlagenrücklauf Bypass defekt
+    2. Bit = Fehler Fühler Speichermitte Bypass defekt
+    3. Bit = Fehler Volumenstromzähler WZ defekt
+    4. Bit = Fehler Fühler Rücklauf WZ defekt
+    5. Bit = Fehler Fühler Vorlauf WZ defekt
+    6. Bit = Fehler Fühler Speicher-unten 2 defekt
+    7. Bit = Fehler Fühler Speicher-unten 1 defekt
+    8. Bit = Fehler Fühler Kollektor defekt
+    """
+    def decode(self, byte):
+        flags = []
+        if byte & 0x01:
+            flags.append("Fehler Fühler Anlagenrücklauf Bypass defekt")
+        if byte & 0x02:
+            flags.append("Fehler Fühler Speichermitte Bypass defekt")
+        if byte & 0x04:
+            flags.append("Fehler Volumenstromzähler WZ defekt")
+        if byte & 0x08:
+            flags.append("Fehler Fühler Rücklauf WZ defekt")
+        if byte & 0x10:
+            flags.append("Fehler Fühler Vorlauf WZ defekt")
+        if byte & 0x20:
+            flags.append("Fehler Fühler Speicher-unten 2 defekt")
+        if byte & 0x40:
+            flags.append("Fehler Fühler Speicher-unten 1 defekt")
+        if byte & 0x80:
+            flags.append("Fehler Fühler Kollektor defekt")
+
+        if not flags:
+            return {self.name: "none"}
+
+        return {self.name: ", ".join(flags)}
+
+class DataSolBW3(DataTypeBase):
+    """
+    1. Bit = Umschaltventil Speicher 2 zu.
+    2. Bit = Umschaltventil Speicher 2 auf/Speicherladepumpe2.
+    3. Bit = Umschaltventil Bypass zu
+    4. Bit = Umschaltventil Bypass auf
+    5. Bit = Sekundärpumpe Speicher 2 Betrieb
+    """
+    def decode(self, byte):
+        flags = []
+        if byte & 0x01:
+            flags.append("Umschaltventil Speicher 2 zu.")
+        if byte & 0x02:
+            flags.append("Umschaltventil Speicher 2 auf/Speicherladepumpe2.")
+        if byte & 0x04:
+            flags.append("Umschaltventil Bypass zu.")
+        if byte & 0x08:
+            flags.append("Umschaltventil Bypass auf.")
+        if byte & 0x10:
+            flags.append("Sekundärpumpe Speicher 2 Betrieb.")
+
+        if not flags:
+            return {self.name: "none"}
+
+        return {self.name: ", ".join(flags)}
 
 class Obase:
     def __init__(self, monid, name, datalen):
@@ -202,6 +471,11 @@ class Obase:
         blocklen = 6
         now = timestamp()
         i = databytes[0]
+
+        if i >= self.datalen:
+            log.warning("Invalid start index %d for monitor 0x%x with datalen %d", i, self.monid, self.datalen)
+            return
+
         if i+blocklen > self.datalen:
             log.warning("Monitor 0x%x data out of bounds %d, data %s", self.monid, self.datalen, str(databytes))
             return
@@ -240,43 +514,68 @@ class MonBase(Obase):
 class MonHeizkreis(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 18)
-        self.datatypes[0] = DataHKStat1("Status1", "Betriebswerte 1")
-        self.datatypes[1] = DataHKStat2("Status2", "Betriebswerte 2")
-        self.datatypes[2] = DataTempVorl("T_Vs", "Vorlaufsolltemperatur")
-        self.datatypes[3] = DataTempVorl("T_Vm", "Vorlaufisttemperatur")
-        self.datatypes[4] = DataTempRaum("T_Rs", "Raumsolltemperatur")
-        self.datatypes[5] = DataTempRaum("T_Rm", "Raumisttemperatur")
+        self.datatypes[0] = DataHKStat1("Betriebswerte 1")
+        self.datatypes[1] = DataHKStat2("Betriebswerte 2")
+        self.datatypes[2] = DataTempVorl("Vorlaufsolltemperatur")
+        self.datatypes[3] = DataTempVorl("Vorlaufisttemperatur")
+        self.datatypes[4] = DataTempRaum("Raumsolltemperatur")
+        self.datatypes[5] = DataTempRaum("Raumisttemperatur")
+        self.datatypes[8] = DataInteger("Pumpe")
+        self.datatypes[9] = DataInteger("Stellglied")
 
 class MonKessel(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 42)
-        self.datatypes[0] = DataTempVorl("T_s", "Kesselvorlauf-Solltemperatur")
-        self.datatypes[1] = DataTempVorl("T_m", "Kesselvorlauf-Isttemperatur")
+        self.datatypes[0] = DataTempVorl("Kesselvorlauf-Solltemperatur")
+        self.datatypes[1] = DataTempVorl("Kesselvorlauf-Isttemperatur")
         self.datatypes[7] = DataUint8Hex("Kesselstatus", "Kessel Betrieb Bits")
-        self.datatypes[8] = DataUInt8("Brenner_s", "Brenner Ansteuerung")
+        self.datatypes[8] = DataUInt8("Brenner Ansteuerung")
         self.datatypes[34] = DataUint8Hex("Brennerstatus", "Brenner Status Bits")
 
 class MonKesselHaengend(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 60)
-        self.datatypes[6] = DataTempVorl("T_s", "Kesselvorlauf-Solltemperatur")
-        self.datatypes[7] = DataTempVorl("T_m", "Kesselvorlauf-Isttemperatur")
-        self.datatypes[14] = DataUint8Hex("UBA", "HD-Mode der UBA")
-        self.datatypes[20] = DataTempRueckl("T_rm", "Kesselrücklauf-Isttemperatur")
+        self.datatypes[6] = DataTempVorl("Kesselvorlauf-Solltemperatur")
+        self.datatypes[7] = DataTempVorl("Kesselvorlauf-Isttemperatur")
+        self.datatypes[14] = DataUint8Hex("HD-Mode der UBA")
+        self.datatypes[20] = DataTempRueckl("Kesselrücklauf-Isttemperatur")
 
-class MonGeneric(MonBase):
+class MonConf(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 24)
-        self.datatypes[0] = DataTempAussen("T_Aus", "Außentemperatur")
-        self.datatypes[18] = DataTempVorl("T_Vs", "Anlagenvorlaufsolltemperatur")
-        self.datatypes[19] = DataTempVorl("T_Vm", "Anlagenvorlaufisttemperatur")
-        self.datatypes[23] = DataTempVorl("T_Vrm", "Regelgerätevorlaufisttemperatur")
+        self.datatypes[0] = DataTempAussen("Außentemperatur")
+        self.datatypes[6] = DataSlot("Modul in Slot 1")
+        self.datatypes[7] = DataSlot("Modul in Slot 2")
+        self.datatypes[8] = DataSlot("Modul in Slot 3")
+        self.datatypes[9] = DataSlot("Modul in Slot 4")
+        self.datatypes[10] = DataSlot("Modul in Slot A")
+        self.datatypes[18] = DataTempVorl("Anlagenvorlaufsolltemperatur")
+        self.datatypes[19] = DataTempVorl("Anlagenvorlaufisttemperatur")
+        self.datatypes[23] = DataTempVorl("Regelgerätevorlaufisttemperatur")
 
 class MonSolar(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 54)
-        self.datatypes[10] = DataTempVorl("T_Bufm", "Temperatur Speichermitte")
-        self.datatypes[11] = DataTempVorl("T_Rlm", "Anlagenrücklauftemperatur")
+        self.datatypes[0] = DataSolBW1("Betriebswerte 1")
+        self.datatypes[1] = DataSolBW2("Betriebswerte 2")
+        self.datatypes[2] = DataSolBW3("Betriebswerte 3")
+		
+        coltemp = DataTempCollector(2, "Collectortemperatur")
+        self.datatypes[3] = coltemp.byte(1)
+        self.datatypes[4] = coltemp.byte(0)
+
+        self.datatypes[5] = DataInteger("Modulation Pumpe")
+        self.datatypes[6] = DataTempSol("T1 Temp unten")
+        self.datatypes[7] = DataSolStat1("T1 Betriebsstatus")
+        self.datatypes[8] = DataTempSol("T2 Temp unten")
+        self.datatypes[9] = DataSolStat1("T2 Betriebsstatus")
+        self.datatypes[10] = DataTempVorl("Temperatur Speichermitte")
+        self.datatypes[11] = DataTempVorl("Anlagenrücklauftemperatur")
+
+        solarhours = DataSolarHours(3, "Betriebsstunden")
+        self.datatypes[24] = solarhours.byte(2)
+        self.datatypes[25] = solarhours.byte(1)
+        self.datatypes[26] = solarhours.byte(0)
 
 class MonWaermemenge(MonBase):
     def __init__(self, monid, name):
@@ -299,10 +598,10 @@ class MonWaermemenge(MonBase):
 class MonWarmWasser(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 12)
-        self.datatypes[0] = DataWWStat1("Status 1", "Betriebswerte 1")
-        self.datatypes[1] = DataWWStat2("Status 2", "Betriebswerte 2")
-        self.datatypes[2] = DataTempWW("T_s", "Warmwasser Solltemperatur")
-        self.datatypes[3] = DataTempWW("T_m", "Warmwasser Isttemperatur")
+        self.datatypes[0] = DataWWStat1("Betriebswerte 1")
+        self.datatypes[1] = DataWWStat2("Betriebswerte 2")
+        self.datatypes[2] = DataTempWW("Warmwasser Solltemperatur")
+        self.datatypes[3] = DataTempWW("Warmwasser Isttemperatur")
 
 class ConfBase(Obase):
     def __init__(self, monid, name, datalen):
@@ -373,7 +672,7 @@ monitor_types = {
     0x85 : LogamaticType("Strategie wandhängend", 12),
     0x87 : LogamaticType("Fehlerprotokoll", 42),
     0x88 : LogamaticType("Kessel bodenstehend", 42, MonKessel, "Kessel"),
-    0x89 : LogamaticType("Konfiguration", 24, MonGeneric),
+    0x89 : LogamaticType("Konfiguration", 24, MonConf),
     0x8A : LogamaticType("Heizkreis 5", 18, MonHeizkreis),
     0x8B : LogamaticType("Heizkreis 6", 18, MonHeizkreis),
     0x8C : LogamaticType("Heizkreis 7", 18, MonHeizkreis),
@@ -393,7 +692,7 @@ monitor_types = {
     0x9B : LogamaticType("Wärmemenge", 36, MonWaermemenge),
     0x9C : LogamaticType("Störmeldemodul", 6),
     0x9D : LogamaticType("Unterstation", 6),
-    0x9E : LogamaticType("Solarfunktion", 54, MonSolar, "Speicher"),
+    0x9E : LogamaticType("Solarfunktion", 54, MonSolar, "Solar"),
     0x9F : LogamaticType("alternativer Wärmeerzeuger", 42),
 }
 conf_types = {

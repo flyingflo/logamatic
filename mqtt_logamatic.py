@@ -41,7 +41,7 @@ def start(deliver_callback):
 
     if os.getenv('MQTT_WRITE_USERNAME') and os.getenv('MQTT_WRITE_PASSWORD'):
         client.username_pw_set(username=os.getenv('MQTT_WRITE_USERNAME'), password=os.getenv('MQTT_WRITE_PASSWORD'))
-    rc = client.connect(os.getenv('MQTT_WRITE_HOST', 'localhost'))
+    rc = client.connect(os.getenv('MQTT_WRITE_HOST'),int(os.getenv('MQTT_WRITE_PORT')))
 
     log.info("client.connect %d", rc)
     client.loop_start()
@@ -57,4 +57,3 @@ def test_callback(msg):
 if __name__ == "__main__":
     logging.basicConfig()
     start(test_callback)
-    
