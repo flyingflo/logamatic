@@ -14,10 +14,11 @@ log_send.setLevel(logging.INFO)
 timestamp = time.time
 
 class DataTypeBase():
-    def __init__(self, name, fullname=""):
+    def __init__(self, name, fullname="", metadata={}):
         self.name = name
         self.fullname = fullname if fullname else name
         self.values = {}
+        self.metadata = dict(metadata)
 
     def decode(self, byte):
         """
@@ -69,6 +70,14 @@ class DataUIntMultiByte(DataTypeBase):
         def name(self):
             return self.parent.name + "byte " + str(self.byteindex)
 
+        @property
+        def metadata(self):
+            return self.parent.metadata
+
+        @property
+        def fullname(self):
+            return self.parent.fullname
+
         def decode(self, byte):
             self.parent.bytesvalues[self.byteindex] = byte
             # Update the complete value after all bytes have been received.
@@ -79,8 +88,8 @@ class DataUIntMultiByte(DataTypeBase):
             else:
                 return {}
 
-    def __init__(self, bytecount, name, fullname=''):
-        super().__init__(name, fullname=fullname)
+    def __init__(self, bytecount, name, fullname='', metadata={}):
+        super().__init__(name, fullname, metadata)
         self.bytesvalues = [0] * bytecount
         self.bytehooks = [self.ByteHook(self, i) for i in range(bytecount)]
 
@@ -191,7 +200,7 @@ class Obase:
     def __init__(self, monid, name, datalen):
         self.monid = monid
         self.name = name
-        self.prefix = "base/" + name
+        self.prefix = ["base", name]
         self.datalen = datalen
         self.mem = [None]*datalen
         self.datatypes = [None]*datalen
@@ -213,15 +222,14 @@ class Obase:
             log.debug("Mon recv %d: %s", p, self.datatypes[p].name)
             newval = self.datatypes[p].decode(self.mem[p])
             for nk in newval:
-                k = "/".join((self.prefix, nk))
-                log.debug("Mon recv got %s", k)
-                if not k in self.values or self.values[k] != newval[nk]:
-                    self.values[k] = newval[nk]
-                    self.value_timestamps[k] = now
-                    self.update_event(k)
+                log.debug("Mon recv got %s", "/".join(self.prefix + [nk]))
+                if nk not in self.values or self.values[nk] != newval[nk]:
+                    self.values[nk] = newval[nk]
+                    self.value_timestamps[nk] = now
+                    self.update_event(nk, p)
+
     def get_value(self, k):
-        fk = "/".join((self.prefix, k))
-        return self.values[fk]
+        return self.values[k]
 
     def get_value_str(self, k):
         try:
@@ -229,60 +237,152 @@ class Obase:
         except:
             return "--"
 
-    def update_event(self, k):
-        publish_update(k, self.values[k])
+    def update_event(self, k, p):
+        mqtt_logamatic.publish_update(
+            self.prefix,
+            k,
+            self.values[k],
+            self.datatypes[p].metadata,
+            self.monid,
+            self.name,
+            self.datatypes[p].fullname
+        )
+
 
 class MonBase(Obase):
     def __init__(self, monid, name, datalen):
         super().__init__(monid, name, datalen)
-        self.prefix = "mon/" + name
+        self.prefix = ["mon", name]
+
 
 class MonHeizkreis(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 18)
-        self.datatypes[0] = DataHKStat1("Status1", "Betriebswerte 1")
-        self.datatypes[1] = DataHKStat2("Status2", "Betriebswerte 2")
-        self.datatypes[2] = DataTempVorl("T_Vs", "Vorlaufsolltemperatur")
-        self.datatypes[3] = DataTempVorl("T_Vm", "Vorlaufisttemperatur")
-        self.datatypes[4] = DataTempRaum("T_Rs", "Raumsolltemperatur")
-        self.datatypes[5] = DataTempRaum("T_Rm", "Raumisttemperatur")
+        self.datatypes[0] = DataHKStat1(
+            "Status1", "Betriebswerte 1", {"device_class": "enum"}
+        )
+        self.datatypes[1] = DataHKStat2(
+            "Status2", "Betriebswerte 2", {"device_class": "enum"}
+        )
+        self.datatypes[2] = DataTempVorl(
+            "T_Vs",
+            "Vorlaufsolltemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[3] = DataTempVorl(
+            "T_Vm",
+            "Vorlaufisttemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[4] = DataTempRaum(
+            "T_Rs",
+            "Raumsolltemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[5] = DataTempRaum(
+            "T_Rm",
+            "Raumisttemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+
 
 class MonKessel(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 42)
-        self.datatypes[0] = DataTempVorl("T_s", "Kesselvorlauf-Solltemperatur")
-        self.datatypes[1] = DataTempVorl("T_m", "Kesselvorlauf-Isttemperatur")
-        self.datatypes[7] = DataUint8Hex("Kesselstatus", "Kessel Betrieb Bits")
-        self.datatypes[8] = DataUInt8("Brenner_s", "Brenner Ansteuerung")
-        self.datatypes[34] = DataUint8Hex("Brennerstatus", "Brenner Status Bits")
+        self.datatypes[0] = DataTempVorl(
+            "T_s",
+            "Kesselvorlauf-Solltemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[1] = DataTempVorl(
+            "T_m",
+            "Kesselvorlauf-Isttemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[7] = DataUint8Hex(
+            "Kesselstatus", "Kessel Betrieb Bits", {"device_class": "enum"}
+        )
+        self.datatypes[8] = DataUInt8(
+            "Brenner_s", "Brenner Ansteuerung", {"device_class": "enum"}
+        )
+        self.datatypes[34] = DataUint8Hex(
+            "Brennerstatus", "Brenner Status Bits", {"device_class": "enum"}
+        )
+
 
 class MonKesselHaengend(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 60)
-        self.datatypes[6] = DataTempVorl("T_s", "Kesselvorlauf-Solltemperatur")
-        self.datatypes[7] = DataTempVorl("T_m", "Kesselvorlauf-Isttemperatur")
-        self.datatypes[14] = DataUint8Hex("UBA", "HD-Mode der UBA")
-        self.datatypes[20] = DataTempRueckl("T_rm", "Kesselrücklauf-Isttemperatur")
+        self.datatypes[6] = DataTempVorl(
+            "T_s",
+            "Kesselvorlauf-Solltemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[7] = DataTempVorl(
+            "T_m",
+            "Kesselvorlauf-Isttemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[14] = DataUint8Hex(
+            "UBA", "HD-Mode der UBA", {"device_class": "enum"}
+        )
+        self.datatypes[20] = DataTempRueckl(
+            "T_rm",
+            "Kesselrücklauf-Isttemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+
 
 class MonGeneric(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 24)
-        self.datatypes[0] = DataTempAussen("T_Aus", "Außentemperatur")
-        self.datatypes[18] = DataTempVorl("T_Vs", "Anlagenvorlaufsolltemperatur")
-        self.datatypes[19] = DataTempVorl("T_Vm", "Anlagenvorlaufisttemperatur")
-        self.datatypes[23] = DataTempVorl("T_Vrm", "Regelgerätevorlaufisttemperatur")
+        self.datatypes[0] = DataTempAussen(
+            "T_Aus",
+            "Außentemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[18] = DataTempVorl(
+            "T_Vs",
+            "Anlagenvorlaufsolltemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[19] = DataTempVorl(
+            "T_Vm",
+            "Anlagenvorlaufisttemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[23] = DataTempVorl(
+            "T_Vrm",
+            "Regelgerätevorlaufisttemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+
 
 class MonSolar(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 54)
-        self.datatypes[10] = DataTempVorl("T_Bufm", "Temperatur Speichermitte")
-        self.datatypes[11] = DataTempVorl("T_Rlm", "Anlagenrücklauftemperatur")
+        self.datatypes[10] = DataTempVorl(
+            "T_Bufm",
+            "Temperatur Speichermitte",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[11] = DataTempVorl(
+            "T_Rlm",
+            "Anlagenrücklauftemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+
 
 class MonWaermemenge(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 36)
 
-        overall = DataUIntMultiByte(4, "W_overall", 'Wärmemenge gesamt')
+        overall = DataUIntMultiByte(
+            4,
+            "W_overall",
+            "Wärmemenge gesamt",
+            {"device_class": "duration", "unit_of_measurement": "min"},
+        )
         self.datatypes[30] = overall.byte(3)
         self.datatypes[31] = overall.byte(2)
         self.datatypes[32] = overall.byte(1)
@@ -296,18 +396,32 @@ class MonWaermemenge(MonBase):
         self.datatypes[8] = yesterday.byte(1)
         self.datatypes[9] = yesterday.byte(0)
 
+
 class MonWarmWasser(MonBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 12)
-        self.datatypes[0] = DataWWStat1("Status 1", "Betriebswerte 1")
-        self.datatypes[1] = DataWWStat2("Status 2", "Betriebswerte 2")
-        self.datatypes[2] = DataTempWW("T_s", "Warmwasser Solltemperatur")
-        self.datatypes[3] = DataTempWW("T_m", "Warmwasser Isttemperatur")
+        self.datatypes[0] = DataWWStat1(
+            "Status 1", "Betriebswerte 1", {"device_class": "enum"}
+        )
+        self.datatypes[1] = DataWWStat2(
+            "Status 2", "Betriebswerte 2", {"device_class": "enum"}
+        )
+        self.datatypes[2] = DataTempWW(
+            "T_s",
+            "Warmwasser Solltemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+        self.datatypes[3] = DataTempWW(
+            "T_m",
+            "Warmwasser Isttemperatur",
+            {"device_class": "temperature", "unit_of_measurement": "°C"},
+        )
+
 
 class ConfBase(Obase):
     def __init__(self, monid, name, datalen):
         super().__init__(monid, name, datalen)
-        self.prefix = "cnf/" + self.name
+        self.prefix = ["cnf", self.name]
     def encode(self, name, value):
         dn = None
         for d in self.datatypes:
@@ -327,9 +441,6 @@ class ConfBase(Obase):
         return o, mem
 
 class DataHKMode(DataTypeBase):
-    def __init__(self, name, fullname=''):
-        super().__init__(name, fullname=fullname)
-
     codes = ["AUS", "EIN", "AUT"]
     def decode(self, byte):
         try:
@@ -348,19 +459,81 @@ class DataHKMode(DataTypeBase):
 class ConfHeizkreis(ConfBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 62)
-        self.datatypes[1] = DataTempAussen("T_Sommer", "Sommer-Winter Schwelle")
-        self.datatypes[2] = DataTempRaum("T_Nacht", "Solltemperatur Nacht")
-        self.datatypes[3] = DataTempRaum("T_Tag", "Solltemperatur Tag")
-        self.datatypes[4] = DataHKMode("Modus", "Betriebsart")
+        self.datatypes[1] = DataTempAussen(
+            "T_Sommer",
+            "Sommer-Winter Schwelle",
+            {
+                "platform": "number",
+                "min": 8,
+                "max": 18,
+                "step": 1,
+                "mode": "slider",
+                "unit_of_measurement": "°C",
+                "device_class": "temperature",
+            },
+        )
+        self.datatypes[2] = DataTempRaum(
+            "T_Nacht",
+            "Solltemperatur Nacht",
+            {
+                "platform": "number",
+                "min": 10,
+                "max": 29,
+                "step": 0.5,
+                "mode": "slider",
+                "unit_of_measurement": "°C",
+                "device_class": "temperature",
+            },
+        )
+        self.datatypes[3] = DataTempRaum(
+            "T_Tag",
+            "Solltemperatur Tag",
+            {
+                "platform": "number",
+                "min": 11,
+                "max": 30,
+                "step": 0.5,
+                "mode": "slider",
+                "unit_of_measurement": "°C",
+                "device_class": "temperature",
+            },
+        )
+        self.datatypes[4] = DataHKMode(
+            "Modus",
+            "Betriebsart",
+            {"platform": "select", "device_class": "enum", "options": DataHKMode.codes},
+        )
+
 
 class ConfWarmwasser(ConfBase):
     def __init__(self, monid, name):
         super().__init__(monid, name, 41)
-        self.datatypes[10] = DataTempWW("T_s", "Solltemperatur")
-        self.datatypes[14] = DataHKMode("Modus", "Betriebsart")
+        self.datatypes[10] = DataTempWW(
+            "T_s",
+            "Solltemperatur",
+            {
+                "platform": "number",
+                "min": 10,
+                "max": 80,
+                "step": 1,
+                "mode": "slider",
+                "unit_of_measurement": "°C",
+                "device_class": "temperature",
+            },
+        )
+        self.datatypes[14] = DataHKMode(
+            "Modus",
+            "Betriebsart",
+            {"platform": "select", "device_class": "enum", "options": DataHKMode.codes},
+        )
 
-CompleteLogamaticType = namedtuple("LogamaticType", "name datalen dataclass shortname")
-LogamaticType = lambda name, datalen, dataclass=None, shortname="": CompleteLogamaticType(name, datalen, dataclass, shortname)
+
+class LogamaticType():
+    def __init__(self, name, datalen, dataclass=None, shortname=""):
+        self.name = name
+        self.datalen = datalen
+        self.dataclass = dataclass
+        self.shortname = shortname
 
 monitor_types = {
 # Monitor data
@@ -490,23 +663,6 @@ def recv_can_message(msg, message_types):
         log.debug("Update for mon oid 0x%x done", oid)
         return True
     return False
-
-def publish_update(k, v):
-    log.debug("Update: %s = %s", str(k), str(v))
-    mqtt_logamatic.publish_value(str(k), str(v))
-    update_value_dump()
-
-def update_value_dump():
-    global valuestr
-    valuestr = ""
-    for ok in sorted(data_objects):
-        o = data_objects[ok]
-        for vk in sorted(o.values):
-            valuestr += vk.ljust(30) + "=" + str(o.values[vk]) + "\n"
-    log.debug("All current values:\n" + valuestr)
-    if valuefile:
-        with open(valuefile, "w") as f:
-            f.write(valuestr)
 
 def enc_can_id(d, s, mon=0):
      m5 = 0b11111

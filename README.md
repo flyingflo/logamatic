@@ -66,3 +66,8 @@ Check .env.example if you want to overwrite some default settings and rename .en
 ```
 python3 logamatic4000.py
 ```
+
+## Home Assistant
+By default it sends [Home Assistant MQTT discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery) metadata on the default topic
+prefix `homeassistant`. 
+Sensors and controls show up on connected Home Assistant instances.
